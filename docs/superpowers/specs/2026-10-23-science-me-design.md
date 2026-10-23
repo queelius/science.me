@@ -1,6 +1,6 @@
 # science.me (design document)
 
-**Version:** 0.3 (2026-10-23)
+**Version:** 0.4 (2026-10-23)
 **Status:** brainstorm output, pre-plan. The social layer (section 8) is deliberately open.
 **Authors:** Alexander Richard Towell (decisions), Claude (drafting; calls marked as such)
 
@@ -10,13 +10,13 @@ Labels:
 - **Call**: Claude's choice where a builder needed one. Alex has not confirmed; overridable.
 - **Open**: nobody has decided. Sections 8 and 9 collect these.
 
-Version 0.3 is a simplification pass over 0.2 (changelog, section 11). The philosophy (section 3) is unchanged. The machinery (section 4) was reduced to two kinds of thing people create, one scorer, and git.
+Version 0.3 was a simplification pass over 0.2; 0.4 inverts the economics: intelligence is abundant and observations are scarce (changelog, section 11). The machinery (section 4) is two kinds of thing people create, one scorer, one puller, and git.
 
 ---
 
 ## 0. In one paragraph
 
-science.me is a collaborative platform, in the mold of [Prove2Me](https://prove2.me), on which humans and AI agents jointly maintain an honest, machine-checked, self-correcting account of what the evidence currently supports, what each supported claim rests on, and what would overturn it; and, on the same machinery, propose new theories as programs that predict data not yet collected, and are scored when it arrives. Prove2Me industrialized the *verification and composition* of mathematical proofs so that uncoordinated contributions accumulate instead of piling up. science.me does the same for empirical claims. The one thing science has that cannot be gamed is *time*: a program committed before the data existed. That is the platform's kernel, and in the pilot it is literally a git repository. Agentic intelligence is assumed as a first principle (Decided): agents do everything that requires judgment, and the design's job is to make each of their outputs checkable (section 5).
+science.me is a collaborative platform, in the mold of [Prove2Me](https://prove2.me), on which humans and AI agents jointly maintain an honest, machine-checked, self-correcting account of what the evidence currently supports, what each supported claim rests on, and what would overturn it; and, on the same machinery, propose new theories as programs that predict data not yet collected, and are scored when it arrives. Prove2Me industrialized the *verification and composition* of mathematical proofs so that uncoordinated contributions accumulate instead of piling up. science.me does the same for empirical claims. The one thing science has that cannot be gamed is *time*: a program committed before the data existed. That is the platform's kernel, and in the pilot it is literally a git repository. Agentic intelligence is assumed as a first principle (Decided): agents do everything that requires judgment, and the design's job is to make each of their outputs checkable (section 5). Because intelligence can be bought with compute, programs are abundant and the scarce resource is observations that discriminate between them, which arrive at the speed of the calendar. The platform's most valuable output is therefore the ranked list of what to observe next (4.10).
 
 ---
 
@@ -32,9 +32,9 @@ The grand vision (Decided) is the discovery of novel theories of a data-generati
 
 ### 1.2 What it is, and is not
 
-It **is**: a repository of programs that predict streams of data, scored only on data that arrived after each program was committed, with a standing derived from those scores; and a set of captained missions that say which streams, which claims, and which tests matter.
+It **is**: a repository of programs that predict streams of data, scored only on data that arrived after each program was committed, with a standing derived from those scores; a ranked list of the observations that would most change those standings; and a set of captained missions that say which streams, which claims, and which observations matter.
 
-It is **not**: a replacement for the scientific community (the community is the open-ended collaboration of intelligences; what it lacks is a composition rule, and this is the composition rule); a way to extract new truths from static public data by volume (a fixed dataset holds bounded evidence and re-analysis spends it; given up deliberately); or a laboratory (it cannot make observations; it can say which observation is worth making).
+It is **not**: a replacement for the scientific community (the community is the open-ended collaboration of intelligences; what it lacks is a composition rule, and this is the composition rule); a way to extract new truths from static public data by volume (a fixed dataset holds bounded evidence and re-analysis spends it; given up deliberately); or a laboratory (it cannot make observations; it says which observation is worth making, with a number attached, and that is its main product).
 
 ### 1.3 Relation to Prove2Me
 
@@ -76,6 +76,7 @@ Unchanged from 0.2 in substance; tightened.
 8. **Severity (Call).** A test counts in proportion to how probably it would have failed had the theory been wrong: committed before the data, on targets the program had not seen, differing from what the mixture already predicted. All three are facts in git history.
 9. **Messiness is functional (Decided).** Standings are cumulative scores, so they move by bounded amounts per week and never toggle.
 10. **Interventions are program surgery (Call).** For a program that exposes its assignments, `do(X = x)` is: replace the assignment of X, leave the rest. Derived, not authored, correct by construction relative to the declared structure. The structure *is* the causal claim, and two observationally equivalent programs that differ in one assignment's parents differ in what they predict on an intervention arm.
+11. **Intelligence is abundant; observations are scarce (Decided).** Programs cost compute. Discriminating observations cost calendar time, instruments, and people. The binding constraint on real evidence is time, so the platform's throughput is bits of evidence per week, and its levers are breadth of streams, observing where programs disagree, and synthetic worlds that compress time. Data found in the wild is context for generating theories, not evidence, because current models have read it.
 
 ---
 
@@ -118,7 +119,9 @@ Negative-binomial-by-moments is a Call: it has no free parameter, suits counts, 
 weight(program) ∝ exp( Σ counted scores ) × 2^(−amortized length)
 ```
 
-where length is gzipped canonical source bytes, and an imported program's length is divided among its importers. This is the Bayes/Hedge rule; its cumulative score is within the length prior of the best single program in hindsight. Stacking is deferred (4.10). A discovery is a program whose entry shifts weight; its size is the bits by which the mixture's total codelength fell. Amortized length is what prices the protective belt: a lens imported by one program is charged to it in full; one imported by twenty is nearly free.
+where length is gzipped canonical source bytes, and an imported program's length is divided among its importers. This is the Bayes/Hedge rule; its cumulative score is within the length prior of the best single program in hindsight. Stacking is deferred (4.12). A discovery is a program whose entry shifts weight; its size is the bits by which the mixture's total codelength fell. Amortized length is what prices the protective belt: a lens imported by one program is charged to it in full; one imported by twenty is nearly free.
+
+Standings report mixture weights and never a single best program: with N committed programs the prior pays log N bits, which is the population-scale multiple-comparisons correction, and the top-ranked of a million is lucky, not right.
 
 `STANDINGS.md` is generated by the scorer and committed; CI fails when it is stale, the pattern Alex already uses for `STATE.md`.
 
@@ -144,11 +147,19 @@ For every program, an agent of a different model lineage than the author's, give
 
 ### 4.9 Kernel and trust
 
-Two components. **Git**, pushed to a host that records push time: content-addressed, append-only, ordering not under the committer's control. **The scorer**, a pinned container, tiny, tested against synthetic worlds with analytic answers, versioned; every score records its scorer hash, and upgrading the scorer is a recomputation like any other. Anyone who clones the repository can recompute every standing.
+Three components. **Git**, pushed to a host that records push time: content-addressed, append-only, ordering not under the committer's control. **The scorer**, a pinned container, tiny, tested against synthetic worlds with analytic answers, versioned; every score records its scorer hash, and upgrading the scorer is a recomputation like any other. **The puller**, which runs stream-ingest programs on schedule inside the kernel, so that a vintage is attested as what the source served at that time by the kernel and not by an agent. Anyone who clones the repository can recompute every standing.
 
 Contamination policy is binary: a score counts iff committed before the vintage, or the vintage is from a private synthetic world. There are no discount classes; the weekly stream makes them unnecessary.
 
-### 4.10 Repository layout
+### 4.10 Wanted observations and expected information gain
+
+A mission file carries a **wanted list**: candidate observations proposed by agents (an intervention arm on a synthetic world, a new stream with its puller program, a real experiment or data pull someone could perform). For each candidate the kernel computes its **expected information gain**: the mutual information between the candidate observation and program identity under the current mixture, which is the entropy of the mixture's predictive minus the weighted entropies of the programs' predictives, all from samples the programs already produce (with surgery applied for arms). Agents propose; the kernel ranks; the synthetic custodian fulfills automatically; humans fulfill real ones in order.
+
+The standings also report the mixture's entropy and the expected information gain of the next scheduled vintage. Together they are an **allocation signal**: when programs agree, more data is useless and the hypothesis space needs new programs; when they disagree, data is the bottleneck and the wanted list is what to spend on.
+
+This is "the mixture's disagreement is the map" made operational, and it is the design's answer to abundant intelligence: a million agents are for pointing at the next observation, not for mining the last one.
+
+### 4.11 Repository layout
 
 ```
 science-me/
@@ -156,7 +167,8 @@ science-me/
   scorer/                  # the trusted program; container spec; tests
   data/<stream>/           # vintages as commits; metadata incl. do arms
   programs/<name>/         # program.py, README.md (tags), readback.md
-  missions/<name>.md       # targets, lag, held-out masks, claims of interest, captain
+  missions/<name>.md       # targets, lag, held-out masks, claims of interest, wanted list, captain
+  pullers/<stream>/        # ingest programs the kernel runs
   scores/                  # derived cache
   STANDINGS.md             # generated; CI fails when stale
   standings.json           # the same, machine-readable (5.4)
@@ -164,7 +176,7 @@ science-me/
 
 A private companion repository holds synthetic generators and publishes their vintages into `data/synthetic-*/`.
 
-### 4.11 What 0.2 had and 0.3 dropped
+### 4.12 What 0.2 had and 0.3 dropped
 
 | Dropped | Replaced by | Comes back when |
 |---|---|---|
@@ -202,7 +214,8 @@ Each agent session, as `SKILL.md` will describe it:
 | Task | Trigger in the standings | Output |
 |---|---|---|
 | Propose a theory | a claim of interest with no program on one side; a mechanism from the literature absent from the mixture | a program with README and tags |
-| Find a crucial test | top programs disagree most on an upcoming target or a hypothetical arm | an arm request (synthetic) or a pointer to real data from that regime |
+| Request an observation | top programs disagree on a hypothetical arm, regime, or measurement | an entry in the mission's wanted list; the kernel attaches its expected information gain (4.10) |
+| Propose a stream | a public, regularly updated source would discriminate programs or open a domain | a puller program the kernel runs (4.9) |
 | Assign blame | a program's score dropped, or its invariance score is poor | a supersession of the theory, a lens, or a shared program, with a README saying why |
 | Translate the literature | a mission's claim of interest cites a paper | a program encoding the paper's mechanism, tagged |
 | Write a read-back | any new program | `readback.md`, by a different lineage |
@@ -223,7 +236,8 @@ Nothing an agent writes enters a standing without passing through one of these. 
 
 ### 5.4 What this does to the design
 
-- The standings must be machine-readable: `standings.json` beside `STANDINGS.md`, including per-target disagreement among the top programs, so agents can find crucial tests without parsing prose.
+- The standings must be machine-readable: `standings.json` beside `STANDINGS.md`, including per-target disagreement among the top programs and the ranked wanted list, so agents can find crucial tests without parsing prose.
+- The allocation signal (4.10) tells agents which task is worth compute right now: new programs when the mixture agrees, observations when it disagrees.
 - Throughput scales with compute: scoring and read-backs are parallel, git append is cheap, and there is no merge queue. The same scaling story as Prove2Me.
 - The human role narrows to agenda, spot-check, and reading the output. The pilot's LLM captain is the first instance.
 - The monoculture risk concentrates, because proposer, prioritizer and auditor are all agents. Lineage diversity in read-backs is the minimum; weighting by lineage diversity is the first thing to add from section 8.
@@ -236,7 +250,8 @@ Nothing an agent writes enters a standing without passing through one of these. 
 |---|---|
 | Forking paths | only pre-commit programs score (4.2) |
 | Training-data contamination | the stream is post-cutoff for every model by construction; synthetic worlds are private |
-| Evidence exhaustion | the platform is organized around streams, not static re-analysis |
+| Evidence exhaustion | the platform is organized around streams, not static re-analysis; throughput is measured in bits per week, and the wanted list directs collection to where it pays (4.10) |
+| Look-elsewhere at population scale | mixture weights, never a headline program; the prior pays log N (4.4) |
 | Monoculture | read-back by a different lineage (4.8); **further mechanism Open** |
 | Cascades | **Open** (section 8) |
 | Manufactured doubt | **Open**; in the pilot, one contributor |
@@ -268,12 +283,13 @@ Alternatives set aside: NHANES (two-year cycle, latest release already in traini
 - One mission, `missions/respiratory-2026-27.md`: targets (streams, jurisdictions, weeks), resolution lag, held-out jurisdictions, claims of interest, captain (an LLM, 4.8).
 - Three synthetic worlds (two compartmental with different lenses, one adversarial), each with a baseline and at least two intervention arms, each with its own mission file.
 - A baseline program (last-value negative binomial) in every mission.
+- Every mission file has a wanted list; the synthetic custodian fulfills requests in EIG order.
 - Contributions come from Alex's existing agent loops through `SKILL.md`; no orchestrator is built (Decided).
 - Scores are summed across jurisdictions and weeks for weights; this is a score, not a test, and claims no error control.
 
 ### 7.3 Success criteria (falsifiable)
 
-1. Tier 1: weight concentrates on the generator's predictive equivalent within a budget the builder sets; surgery-derived predictions on intervention arms match the generator; a lens swap is absorbed by an imported program; a deliberately wrong program injected with a false README is caught by read-back.
+1. Tier 1: weight concentrates on the generator's predictive equivalent within a budget the builder sets; surgery-derived predictions on intervention arms match the generator; a lens swap is absorbed by an imported program; a deliberately wrong program injected with a false README is caught by read-back; and **directed collection beats undirected**: bits of mixture entropy removed per fulfilled request are higher for agent-proposed, EIG-ranked requests than for random arms. The last is the test of the whole premise.
 2. Tier 2: (a) eight consecutive weekly vintages scored, with the platform's calibration reported; (b) at least one claim of interest has a standing that differs materially from "published = supported," with provenance; (c) at least one invariance score reported for a program fitted on some jurisdictions and scored on the held-out ones.
 3. One person who is not Alex commits a program.
 4. Someone in the field says `STANDINGS.md` told them something they did not know.
@@ -311,7 +327,8 @@ Git's object store is right and git's workflow is wrong. The pilot uses the stor
 
 1. **Program interface.** The `program.py` contract (inputs: masked history as a dataframe plus target spec; output: samples), the optional exposed-assignments convention that surgery acts on, and the import mechanism.
 2. **Scorer.** Container spec, seeds, time and memory limits, the negative-binomial fit, WIS alongside, the cache format, `STANDINGS.md` generation, CI staleness check.
-3. **Ingest.** Weekly NHSN and ILINet pulls into `data/`, with vintage metadata; the resolution lag.
+3. **Ingest.** The puller: weekly NHSN and ILINet pulls into `data/`, with vintage metadata; the resolution lag; the contract for agent-proposed puller programs.
+7. **Expected information gain.** The computation from program samples (entropies of the negative-binomial fits), its cost, and how often the wanted list is re-ranked.
 4. **Synthetic generators.** The three generators, their lenses and arms, in the private repository; the publishing step.
 5. **Length measure.** Gzipped canonical source; the amortization over importers.
 6. **SKILL.md.** Mirroring Prove2Me's: setup, roles, the loop and task table of section 5, the read-back protocol.
@@ -333,4 +350,5 @@ Pilot domain: Mathis et al., FluSight evaluation, Nature Communications (2024). 
 - **0.1** (2026-10-23): initial draft from the brainstorm.
 - **0.1.1** (2026-10-23): builder check applied.
 - **0.2** (2026-10-23): Alex's decisions applied: respiratory surveillance stream, synthetic worlds for feedback on demand, LLM captain, contributions from Alex's agent loops; interventions as surgery; lenses; vintages.
-- **0.3** (2026-10-23): simplification pass (KISS). Two kinds of created object (data vintages, programs); programs are the commitments; scores are a cache; claims are tags; environments are masks; interventions are arms; recompute replaces truth maintenance; one scorer (negative binomial by moments) and one weight rule; binary contamination rule; git as the substrate; no web service. Section 4.11 lists what was dropped and when it returns. Added section 5, the engine: agentic intelligence as a first principle (Decided), the agent loop, the task table, and the three checkers.
+- **0.4** (2026-10-23): economics inverted (Decided: intelligence is abundant, observations are scarce). Added: commitment 11; wanted lists with kernel-computed expected information gain and the allocation signal (4.10); the puller as a kernel component (4.9); mixture weights as the look-elsewhere correction (4.4); observation-request and stream-proposal tasks (5.2); directed-versus-undirected collection as a pilot criterion (7.3).
+- **0.3** (2026-10-23): simplification pass (KISS). Two kinds of created object (data vintages, programs); programs are the commitments; scores are a cache; claims are tags; environments are masks; interventions are arms; recompute replaces truth maintenance; one scorer (negative binomial by moments) and one weight rule; binary contamination rule; git as the substrate; no web service. Section 4.12 lists what was dropped and when it returns. Added section 5, the engine: agentic intelligence as a first principle (Decided), the agent loop, the task table, and the three checkers.
