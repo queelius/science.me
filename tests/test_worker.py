@@ -427,7 +427,12 @@ def test_container_command_line(ws, view, fake_docker):
     assert re.fullmatch(r"sm-[0-9a-f]{32}", name)
     work_mount, out_mount = after("-v")
     assert work_mount.endswith(":/work:ro") and out_mount.endswith(":/out")
-    assert call[-7:] == ["worker:test", "python", "-I", "-m", "scienceme.worker_entry", "/work", "/out"]
+    assert call[-4:] == [
+        "worker:test",
+        "sh",
+        "-c",
+        "command -v python >/dev/null 2>&1 || exit 127; python -I -m scienceme.worker_entry /work /out; exit 0",
+    ]
 
 
 def test_container_names_are_unique_per_run(ws, view, fake_docker):
@@ -441,7 +446,7 @@ def test_container_run_uses_the_worker_image_by_default(ws, view, fake_docker, m
     monkeypatch.setenv("SCIENCEME_WORKER_IMAGE", "from-env:1")
     h = frozen(ws, "p", CONST)
     run_order(ws, build_order(ws, h, view, [tgt()]), Isolation.CONTAINER, 30)
-    assert fake_docker.calls()[0][-7] == "from-env:1"
+    assert fake_docker.calls()[0][-4] == "from-env:1"
 
 
 @pytest.mark.parametrize("code", [1, 2, 137])

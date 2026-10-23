@@ -14,6 +14,7 @@ pytestmark = pytest.mark.docker
 
 STREAM = "w/adm"
 BARE_IMAGE = "scienceme-bare:test"
+NO_PYTHON_IMAGE = "scienceme-no-python:test"
 TARGET = Target(stream=STREAM, jurisdiction="A", reference_week=2, horizon=0)
 
 NET = (
@@ -91,20 +92,31 @@ def test_a_missing_image_is_a_worker_error(ws, view):
     assert running_workers() == ""
 
 
-def test_an_image_without_python_is_a_worker_error(ws, view):
-    subprocess.run(
-        ["docker", "build", "-q", "-t", BARE_IMAGE, "-"],
-        input='FROM scratch\nCMD ["/nothing"]\n',
-        text=True,
-        capture_output=True,
-        check=True,
-    )
+def build_image(tag: str, dockerfile: str) -> str:
+    subprocess.run(["docker", "build", "-q", "-t", tag, "-"], input=dockerfile, text=True, capture_output=True, check=True)
+    return tag
+
+
+def test_an_image_with_a_shell_but_no_python_is_a_worker_error(ws, view, docker_image):
+    image = build_image(NO_PYTHON_IMAGE, f"FROM {docker_image}\nRUN rm /usr/local/bin/python /usr/local/bin/python3*\n")
     with pytest.raises(WorkerError, match="exit code 127"):
-        run_in_container(ws, view, BARE_IMAGE, CONST)
+        run_in_container(ws, view, image, CONST)
+
+
+def test_an_image_without_a_shell_is_a_worker_error(ws, view):
+    image = build_image(BARE_IMAGE, 'FROM scratch\nCMD ["/nothing"]\n')
+    with pytest.raises(WorkerError, match="exit code 127"):
+        run_in_container(ws, view, image, CONST)
 
 
 def test_a_program_that_crashes_the_interpreter_fails_its_targets(ws, view, docker_image):
     code = "import os\ndef predict(ctx, target):\n    os._exit(3)\n"
+    assert run_in_container(ws, view, docker_image, code) == Failure(target=TARGET, error="no-result")
+
+
+@pytest.mark.parametrize("status", [125, 126, 127])
+def test_a_program_cannot_forge_dockers_exit_codes(ws, view, docker_image, status):
+    code = f"import os\ndef predict(ctx, target):\n    os._exit({status})\n"
     assert run_in_container(ws, view, docker_image, code) == Failure(target=TARGET, error="no-result")
 
 

@@ -58,6 +58,13 @@ _DOCKER_OUT = "/out"
 _KILL_TIMEOUT_S = 30
 _NO_RESULT = "no-result"
 _TIMEOUT = "timeout"
+# What the container runs.  The shell discards the program's own exit status (a program can `os._exit(126)`),
+# so the status `docker run` returns is docker's or the shell's: 127 when python is missing from the image, 126
+# or 127 when the shell cannot be run, 125 when docker itself failed.  Anything else is decided by `result.json`.
+_CONTAINER_SCRIPT = (
+    "command -v python >/dev/null 2>&1 || exit 127; "
+    f"python -I -m {_ENTRY_MODULE} {_DOCKER_WORK} {_DOCKER_OUT}; exit 0"
+)
 # `docker run` exits 125 when the daemon fails, 126 when the command cannot be invoked, 127 when it is not found.
 _DOCKER_FAILURES = frozenset({125, 126, 127})
 _STDERR_KEPT = 2000
@@ -183,9 +190,10 @@ def _run_process(work: Path, out: Path, timeout_s: int) -> None:
 def _run_container(work: Path, out: Path, timeout_s: int, image: str) -> None:
     """Run the sandbox `work` in a docker container: no network, no capabilities, read-only root and work mount.
 
-    The container runs as the caller, so the files it writes to `out` can be removed afterwards.  The exit
-    code of the program is ignored (the result file decides), but docker's own failure codes raise
-    WorkerError.  On a timeout the container is killed, then TimeoutExpired is raised.
+    The container runs as the caller, so the files it writes to `out` can be removed afterwards.  The program's
+    exit status never reaches docker's (see `_CONTAINER_SCRIPT`), so the result file decides the outcome, while
+    docker's and the shell's failure codes raise WorkerError.  On a timeout the container is killed, then
+    TimeoutExpired is raised.
     """
     name = f"sm-{uuid.uuid4().hex}"
     command = [
@@ -203,7 +211,7 @@ def _run_container(work: Path, out: Path, timeout_s: int, image: str) -> None:
         "-v", f"{work}:{_DOCKER_WORK}:ro",
         "-v", f"{out}:{_DOCKER_OUT}",
         image,
-        "python", "-I", "-m", _ENTRY_MODULE, _DOCKER_WORK, _DOCKER_OUT,
+        "sh", "-c", _CONTAINER_SCRIPT,
     ]
     try:
         code, stderr = _run_keeping_stderr_head(command, timeout_s)
@@ -221,7 +229,7 @@ def _run_container(work: Path, out: Path, timeout_s: int, image: str) -> None:
             pass
         raise
     if code in _DOCKER_FAILURES:
-        raise WorkerError(f"docker run failed with exit code {code}: {stderr}")
+        raise WorkerError(f"docker run failed with exit code {code} (docker, or no sh or python in the image): {stderr}")
 
 
 def _run_keeping_stderr_head(command: list[str], timeout_s: int) -> tuple[int, str]:
