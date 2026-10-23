@@ -173,3 +173,36 @@ def test_resolved_targets_are_sorted_by_week_stream_jurisdiction_horizon(ws):
     assert keys == [
         (1, STREAM, "A", 0), (1, STREAM, "A", 1), (1, STREAM, "B", 0), (1, "w/adm2", "A", 0), (2, STREAM, "A", 0)
     ]
+
+
+# --- per-stream tallies ---
+
+
+def test_pending_and_programs_are_tallied_per_stream(ws):
+    for stream in (STREAM, "w/adm2"):
+        publish(ws, count_spec(id=stream, jurisdictions=("A",), support_max=99), 4, {("A", 2): 5.0}, at(4))
+    store(
+        ws,
+        forecast(P, tgt(stream=STREAM)),  # resolved
+        forecast(P, tgt(stream="w/adm2", horizon=3)),  # pending: its vintage is not published
+        forecast(Q, tgt(stream="w/adm2", horizon=3)),  # pending
+        failed(Q, tgt(stream="w/adm2", horizon=0)),  # a record, but no forecast
+        failed(Q, tgt(stream=STREAM, horizon=0)),
+    )
+    res = resolve(ws, make_mission(streams=(STREAM, "w/adm2")), 4)
+    assert res.pending == 2
+    assert res.pending_by_stream == {STREAM: 0, "w/adm2": 2}
+    assert res.programs_by_stream == {STREAM: (P, Q), "w/adm2": (P, Q)}
+
+
+def test_programs_by_stream_includes_programs_with_only_unscored_records(ws):
+    publish(ws, count_spec(jurisdictions=("A",), support_max=99), 4, {("A", 2): 5.0}, at(4))
+    store(ws, forecast(P, tgt()), failed(Q, tgt(horizon=0)))
+    res = resolve(ws, make_mission(), 4)
+    assert res.programs_by_stream == {STREAM: (P, Q)}
+    assert res.pending_by_stream == {STREAM: 0}
+
+
+def test_per_stream_tallies_are_empty_without_records(ws):
+    res = resolve(ws, make_mission(), 4)
+    assert (res.pending_by_stream, res.programs_by_stream) == ({}, {})

@@ -74,10 +74,13 @@ def make_mission(**overrides) -> Mission:
 
 
 def write_program(ws: Workspace, name: str, code: str, **fields) -> Path:
-    """Write `programs/<name>/` (manifest, `program.py` holding `code`, README) and return its directory."""
+    """Write `programs/<name>/` (manifest, `program.py` holding `code`, README) and return its directory.
+
+    The author lineage is `test` unless `fields` give another.
+    """
     d = ws.programs / name
     d.mkdir(parents=True, exist_ok=True)
-    manifest = ProgramManifest(name=name, author_lineage="test", **fields)
+    manifest = ProgramManifest(**{"name": name, "author_lineage": "test", **fields})
     (d / "program.json").write_text(manifest.model_dump_json(), encoding="utf-8")
     (d / "program.py").write_text(code, encoding="utf-8")
     (d / "README.md").write_text("test program", encoding="utf-8")
