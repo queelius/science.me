@@ -185,13 +185,13 @@ def test_pending_and_programs_are_tallied_per_stream(ws):
         ws,
         forecast(P, tgt(stream=STREAM)),  # resolved
         forecast(P, tgt(stream="w/adm2", horizon=3)),  # pending: its vintage is not published
-        forecast(Q, tgt(stream="w/adm2", horizon=3)),  # pending
+        forecast(Q, tgt(stream="w/adm2", horizon=3)),  # pending: the same target, a second record
         failed(Q, tgt(stream="w/adm2", horizon=0)),  # a record, but no forecast
         failed(Q, tgt(stream=STREAM, horizon=0)),
     )
     res = resolve(ws, make_mission(streams=(STREAM, "w/adm2")), 4)
-    assert res.pending == 2
-    assert res.pending_by_stream == {STREAM: 0, "w/adm2": 2}
+    assert res.pending == 2  # records
+    assert res.pending_targets_by_stream == {STREAM: 0, "w/adm2": 1}  # distinct targets
     assert res.programs_by_stream == {STREAM: (P, Q), "w/adm2": (P, Q)}
 
 
@@ -200,9 +200,9 @@ def test_programs_by_stream_includes_programs_with_only_unscored_records(ws):
     store(ws, forecast(P, tgt()), failed(Q, tgt(horizon=0)))
     res = resolve(ws, make_mission(), 4)
     assert res.programs_by_stream == {STREAM: (P, Q)}
-    assert res.pending_by_stream == {STREAM: 0}
+    assert res.pending_targets_by_stream == {STREAM: 0}
 
 
 def test_per_stream_tallies_are_empty_without_records(ws):
     res = resolve(ws, make_mission(), 4)
-    assert (res.pending_by_stream, res.programs_by_stream) == ({}, {})
+    assert (res.pending_targets_by_stream, res.programs_by_stream) == ({}, {})

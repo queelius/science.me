@@ -9,6 +9,7 @@ from scienceme.mission import (
     WantedItem,
     append_wanted,
     load_mission,
+    list_missions,
     load_wanted,
     mission_streams,
     save_mission,
@@ -177,3 +178,17 @@ def test_candidate_must_be_an_arm_with_targets_on_its_stream():
     arm = arm_spec()
     with pytest.raises(ValidationError):
         Candidate(stream=arm, targets=(Target(stream="w/adm", jurisdiction="A", reference_week=3, horizon=0),))
+
+
+def test_list_missions_is_sorted_and_needs_a_mission_file(ws):
+    for name in ("zed", "m", "alpha"):
+        save_mission(ws, make_mission(name=name))
+    (ws.missions / "no-file").mkdir()  # a directory without mission.json
+    (ws.missions / "notes.txt").write_text("not a mission", encoding="utf-8")
+    assert list_missions(ws) == ["alpha", "m", "zed"]
+
+
+def test_list_missions_without_missions(ws):
+    assert list_missions(ws) == []
+    ws.missions.rmdir()
+    assert list_missions(ws) == []

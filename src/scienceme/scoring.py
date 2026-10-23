@@ -66,16 +66,17 @@ class Resolution(Frozen):
 
     `resolved` is sorted by `target_order`.  `pending` counts prediction records whose target has not
     resolved.  `predicted` and `unscored` count each program's prediction records (resolved or pending)
-    and unscored records; both are keyed by every program with any record.  `pending_by_stream` splits
-    `pending` by stream and `programs_by_stream` lists, sorted, the programs with any record (prediction
-    or unscored) on the stream; both are keyed by every stream with any record.
+    and unscored records; both are keyed by every program with any record.  `pending_targets_by_stream`
+    counts the distinct targets still pending on each stream (the unit of `resolved`, where `pending`
+    counts records) and `programs_by_stream` lists, sorted, the programs with any record (prediction or
+    unscored) on the stream; both are keyed by every stream with any record.
     """
 
     resolved: tuple[ResolvedTarget, ...]
     pending: int
     predicted: dict[str, int]
     unscored: dict[str, int]
-    pending_by_stream: dict[str, int] = {}
+    pending_targets_by_stream: dict[str, int] = {}
     programs_by_stream: dict[str, tuple[str, ...]] = {}
 
 
@@ -87,12 +88,13 @@ def resolve(ws: Workspace, mission: Mission, as_of: int) -> Resolution:
     scores: dict[Target, dict[str, PointScore]] = {}
     predicted: Counter[str] = Counter()
     unscored: Counter[str] = Counter()
-    pending: dict[str, int] = {}
+    pending = 0
+    pending_targets: dict[str, set[Target]] = {}
     on_stream: dict[str, set[str]] = {}
     for record in RecordStore(ws).all(mission.name):
         stream = record.target.stream
         on_stream.setdefault(stream, set()).add(record.program)
-        pending.setdefault(stream, 0)
+        pending_targets.setdefault(stream, set())
         if not isinstance(record, PredictionRecord):
             unscored[record.program] += 1
             continue
@@ -102,7 +104,8 @@ def resolve(ws: Workspace, mission: Mission, as_of: int) -> Resolution:
             realized[target] = archive.realized(target) if target.resolution_issue <= as_of else None
         y = realized[target]
         if y is None:
-            pending[stream] += 1
+            pending += 1
+            pending_targets[stream].add(target)
             continue
         if target.stream not in support:
             support[target.stream] = archive.spec(target.stream).support_max
@@ -115,9 +118,9 @@ def resolve(ws: Workspace, mission: Mission, as_of: int) -> Resolution:
     programs = sorted(predicted.keys() | unscored.keys())
     return Resolution(
         resolved=resolved,
-        pending=sum(pending.values()),
+        pending=pending,
         predicted={p: predicted[p] for p in programs},
         unscored={p: unscored[p] for p in programs},
-        pending_by_stream=dict(sorted(pending.items())),
+        pending_targets_by_stream={s: len(pending_targets[s]) for s in sorted(pending_targets)},
         programs_by_stream={s: tuple(sorted(on_stream[s])) for s in sorted(on_stream)},
     )

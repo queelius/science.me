@@ -2,6 +2,7 @@ import math
 from collections import defaultdict
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 from helpers import CONST, at, count_spec, covariate_spec, make_mission, publish, write_program
 from pydantic import TypeAdapter
@@ -10,13 +11,14 @@ from scienceme.claims import Verdict
 from scienceme.gain import RankedItem, Ranking, save_ranking
 from scienceme.manifest import InterfaceVar, PairDecl, Tag, program_files
 from scienceme.mission import Claim, save_mission
+from scienceme.calibration import Calibration
 from scienceme.model import Intervention, Isolation, Target, TargetFilter, Timing
 from scienceme.pmf import Pmf
 from scienceme.readback import CaptainVerdict, Readback, ReadbackFlag
 from scienceme.record import PredictionRecord, RecordStore, UnscoredRecord
 from scienceme.registry import Registry, RegistryError
 from scienceme.scoring import resolve
-from scienceme.standings import Standings, _fmt, check_all, compute, render, write_all
+from scienceme.standings import Standings, _fmt, _quantized, _round, check_all, compute, render, write_all
 from scienceme.weights import regime_tv, run_mixture
 from scienceme.worker import scorer_hash
 from scienceme.workspace import Workspace
@@ -129,6 +131,15 @@ def test_pending_targets_are_counted(ws, world):
     assert "pending 1" in render([compute(ws, world.mission, 5)])
 
 
+def test_pending_counts_distinct_targets_not_records(ws, world):
+    # both programs forecast the same pending target: one target, two records
+    store(ws, forecast(world.good, tgt(4), 5), forecast(world.bad, tgt(4), 9))
+    stream = only_stream(compute(ws, world.mission, 5))
+    assert (stream.n_resolved, stream.n_pending) == (3, 1)
+    store(ws, forecast(world.good, tgt(5), 5))
+    assert only_stream(compute(ws, world.mission, 5)).n_pending == 2
+
+
 def test_check_detects_staleness(ws, world):
     save_mission(ws, world.mission)
     write_all(ws)
@@ -237,12 +248,53 @@ def test_a_program_with_only_unscored_records_is_awake_without_calibration(ws, w
     assert f"| bad | 1.000 | 1.000 | {bad.advantage_cumulative:.2f} | 3 | 0.75 | n/a | missing |" in render([s])
 
 
+def test_a_program_that_failed_every_target_is_listed_with_no_coverage(ws, world):
+    before = only_stream(compute(ws, world.mission, 5))
+    flaky = freeze(ws, "flaky")
+    store(ws, *(failed(flaky, tgt(w)) for w in (1, 2, 3)))
+    s = compute(ws, world.mission, 5)
+    stream = only_stream(s)
+    by_name = {p.name: p for p in stream.programs}
+    assert set(by_name) == {"good", "bad", "flaky"}
+    assert (by_name["flaky"].n_predicted, by_name["flaky"].coverage) == (0, 0.0)
+    assert by_name["flaky"].calibration.n == 0 and by_name["flaky"].calibration.coverage_90 is None
+    assert (by_name["flaky"].advantage_cumulative, by_name["flaky"].advantage_current) == (0.0, 0.0)
+    for weights in ({p.name: p.w_cumulative for p in stream.programs}, {p.name: p.w_current for p in stream.programs}):
+        assert all(math.isfinite(w) and 0 < w < 1 for w in weights.values())
+        assert sum(weights.values()) == pytest.approx(1.0)
+    # it has no score, so it neither changes the mixture nor anyone's advantage
+    assert stream.mixture_log_score == before.mixture_log_score
+    assert by_name["good"].advantage_cumulative == next(p for p in before.programs if p.name == "good").advantage_cumulative
+    text = render([s])
+    assert "| flaky |" in text and "| 0 | 0.00 | n/a | missing |" in text
+
+
 def test_withdrawn_programs_are_not_awake(ws, world):
     Registry(ws).withdraw(world.bad, at(6), "test")
     s = compute(ws, world.mission, 5)
     (good,) = only_stream(s).programs
     assert (good.name, good.w_cumulative, good.w_current) == ("good", 1.0, 1.0)
+    assert only_stream(s).n_withdrawn == 1
     assert "| bad |" not in render([s])
+
+
+def test_a_stream_whose_programs_are_all_withdrawn_has_no_active_programs(ws, world):
+    for program in (world.good, world.bad):
+        Registry(ws).withdraw(program, at(6), "test")
+    s = compute(ws, world.mission, 5)
+    stream = only_stream(s)
+    assert (stream.programs, stream.n_withdrawn, stream.n_resolved) == ((), 2, 3)
+    text = render([s])
+    assert "No active programs." in text and "No forecasts yet." not in text
+    assert s.indicators.interface_weight_share == 0.0
+
+
+def test_a_stream_without_records_has_no_forecasts_yet(ws):
+    publish_through(ws, STREAM)
+    stream = only_stream(compute(ws, make_mission(), 5))
+    assert (stream.programs, stream.n_withdrawn) == ((), 0)
+    text = render([compute(ws, make_mission(), 5)])
+    assert "No forecasts yet." in text and "No active programs." not in text
 
 
 def test_regime_flag_is_total_variation_above_the_mission_threshold(ws, world):
@@ -250,7 +302,7 @@ def test_regime_flag_is_total_variation_above_the_mission_threshold(ws, world):
     w_cum = {p.program: p.w_cumulative for p in stream.programs}
     w_cur = {p.program: p.w_current for p in stream.programs}
     tv = stream.regime_tv
-    assert tv == regime_tv(w_cum, w_cur) > 0
+    assert tv == pytest.approx(regime_tv(w_cum, w_cur), abs=1e-9) and tv > 0
     for threshold, flag in ((tv / 2, True), (tv, False), (tv * 2, False)):
         got = only_stream(compute(ws, make_mission(claims=(SCHOOL,), regime_flag_tv=threshold), 5))
         assert got.regime_flag is flag
@@ -341,6 +393,89 @@ def test_indicators_skip_streams_that_are_not_archived_or_not_base(ws, world):
     assert [x.stream for x in arms_only.streams] == ["w/adm/s1"] and arms_only.streams[0].programs
     assert arms_only.indicators == compute(ws, make_mission(streams=()), 5).indicators
     assert arms_only.indicators.interface_weight_share == 0.0
+
+
+# --- quantization ---
+
+
+def test_round_keeps_twelve_significant_digits():
+    assert _round(0.12345678901234567) == 0.123456789012
+    assert _round(1234567.8901234567) == 1234567.89012
+    assert _round(-3.0000000000004e-9) == -3.0e-9
+    assert _round(0.1 + 0.2) == 0.3
+    assert _round(0.0) == 0.0 and math.copysign(1.0, _round(-0.0)) == -1.0
+    assert _round(0.5) == 0.5 and _round(1e300) == 1e300
+
+
+def test_round_reaches_every_float_in_nested_data_and_nothing_else():
+    data = {"a": (0.1 + 0.2, [1 / 3]), "n": 3, "s": "x", "none": None, "flag": True, "inner": {"x": 2 / 3}}
+    assert _round(data) == {
+        "a": (0.3, [0.333333333333]), "n": 3, "s": "x", "none": None, "flag": True, "inner": {"x": 0.666666666667}
+    }
+    assert type(_round(data)["flag"]) is bool and type(_round(data)["n"]) is int
+
+
+def test_quantized_models_round_their_nested_floats_and_leave_the_rest():
+    c = Calibration(pit=(1 / 3, 2 / 3), coverage_50=0.1 + 0.2, coverage_90=None, n=2)
+    assert _quantized(c) == Calibration(pit=(0.333333333333, 0.666666666667), coverage_50=0.3, coverage_90=None, n=2)
+
+
+def floats_in(data) -> list[float]:
+    if isinstance(data, float):
+        return [data]
+    if isinstance(data, dict):
+        return [x for v in data.values() for x in floats_in(v)]
+    if isinstance(data, (list, tuple)):
+        return [x for v in data for x in floats_in(v)]
+    return []
+
+
+def test_every_float_in_the_standings_has_at_most_twelve_significant_digits(ws, world):
+    pair(ws)
+    save_ranking(ws, Ranking(mission="m", as_of=5, items=(ranked(0, supporting=(world.good,)),)))
+    s = compute(ws, make_mission(claims=(SCHOOL,)), 5)
+    values = floats_in(s.model_dump())
+    assert len(values) > 50  # weights, advantages, pit bins, deltas, gains...
+    assert all(float(f"{x:.12g}") == x for x in values)
+    assert any(x not in (0.0, 1.0) for x in values)
+
+
+def test_compute_dump_validate_dump_is_byte_stable(ws, world):
+    pair(ws)
+    s = compute(ws, make_mission(claims=(SCHOOL,)), 5)
+    first = STANDINGS.dump_json([s], indent=2)
+    again = STANDINGS.validate_json(first)
+    assert again == [s]
+    assert STANDINGS.dump_json(again, indent=2) == first
+
+
+def test_the_files_do_not_depend_on_the_last_bit_of_a_float(ws, world, monkeypatch):
+    """A last-ulp difference in a weight or an advantage (another CPU's exp or log) leaves the files unchanged."""
+    import scienceme.standings as module
+
+    save_mission(ws, world.mission)
+    write_all(ws)
+    real_mixture, real_weights = module.run_mixture, module.normalized_weights
+
+    def bump(table):
+        return {k: float(np.nextafter(v, np.inf)) for k, v in table.items()}
+
+    def noisy_mixture(*args, **kwargs):
+        adv = real_mixture(*args, **kwargs)
+        return adv.model_copy(update={"cumulative": bump(adv.cumulative), "current": bump(adv.current)})
+
+    def noisy_weights(*args, **kwargs):
+        return bump(real_weights(*args, **kwargs))
+
+    monkeypatch.setattr(module, "run_mixture", noisy_mixture)
+    monkeypatch.setattr(module, "normalized_weights", noisy_weights)
+    assert check_all(ws)
+
+
+def test_the_regime_flag_is_decided_on_the_quantized_total_variation(ws, world):
+    tv = only_stream(compute(ws, world.mission, 5)).regime_tv
+    assert float(f"{tv:.12g}") == tv
+    assert only_stream(compute(ws, make_mission(claims=(SCHOOL,), regime_flag_tv=tv), 5)).regime_flag is False
 
 
 # --- streams, arms and as_of ---

@@ -111,6 +111,13 @@ def _mission_dir(ws: Workspace, name: str) -> Path:
     return ws.missions / name
 
 
+def list_missions(ws: Workspace) -> list[str]:
+    """The names of the workspace's missions, sorted: the directories of `missions/` that hold a `mission.json`."""
+    if not ws.missions.is_dir():
+        return []
+    return sorted(d.name for d in ws.missions.iterdir() if (d / "mission.json").is_file())
+
+
 def load_mission(ws: Workspace, name: str) -> Mission:
     """Read `missions/<name>/mission.json`."""
     return read_model(_mission_dir(ws, name) / "mission.json", Mission)

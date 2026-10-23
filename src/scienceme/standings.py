@@ -9,6 +9,11 @@ A stream's *awake* programs are the ones with any record on it (a forecast or an
 never withdrawn.  Advantages come from one mixture run over the whole mission, so a program carries the same
 advantage in every table; its weight is the softmax of that advantage over the programs awake on the stream.
 Coverage and `n_predicted` are the program's across the mission, as for claims.
+
+Every float in a `Standings` is rounded to 12 significant digits as it is built (`_quantized`).  The weights,
+advantages and log scores come from numpy's exp and log, which can differ in the last bit between CPU
+families; the rounding keeps that noise out of the committed files, so `check_all` can stay an exact byte
+comparison.  Decisions taken from a float (the regime flag, the top set) use the rounded value.
 """
 
 from __future__ import annotations
@@ -25,12 +30,12 @@ from scienceme.calibration import Calibration, calibration
 from scienceme.claims import ClaimStanding, claim_standings
 from scienceme.gain import Ranking, load_latest_ranking
 from scienceme.manifest import program_files
-from scienceme.mission import Mission, load_mission, mission_streams
+from scienceme.mission import Mission, list_missions, load_mission, mission_streams
 from scienceme.model import Frozen, StreamKind, StreamSpec
 from scienceme.readback import ReadbackFlag, load_readback
 from scienceme.readback import flags as readback_flags
 from scienceme.registry import Freeze, Registry, RegistryError, Withdrawal
-from scienceme.scoring import Resolution, resolve
+from scienceme.scoring import Resolution, ResolvedTarget, resolve
 from scienceme.weights import Advantages, normalized_weights, regime_tv, run_mixture
 from scienceme.worker import scorer_hash
 from scienceme.workspace import Workspace
@@ -41,6 +46,7 @@ MARKDOWN_FILE = "STANDINGS.md"
 _TOP_MASS = 0.9
 _WANTED_SHOWN = 10
 _ENCODING = "utf-8"
+_SIGNIFICANT_DIGITS = 12
 
 
 class ProgramStanding(Frozen):
@@ -70,7 +76,8 @@ class StreamStanding(Frozen):
     """One COUNT stream: its awake programs (best cumulative weight first), the mixture's record on it, and the regime flag.
 
     `regime_tv` is the total variation between the cumulative and current weights; `regime_flag` says it
-    exceeds the mission's threshold.  `n_resolved` counts resolved targets and `n_pending` pending forecasts.
+    exceeds the mission's threshold.  `n_resolved` and `n_pending` count targets, resolved and still pending;
+    `n_withdrawn` counts the withdrawn programs with records on the stream, which are not shown.
     """
 
     stream: str
@@ -81,6 +88,7 @@ class StreamStanding(Frozen):
     mixture_log_score: float
     n_resolved: int
     n_pending: int
+    n_withdrawn: int
 
 
 class Indicators(Frozen):
@@ -113,6 +121,27 @@ class Standings(Frozen):
 
 
 _STANDINGS_LIST = TypeAdapter(list[Standings])
+
+
+def _round[T](value: T) -> T:
+    """`value` with every float in it (at any depth of dicts, lists and tuples) rounded to 12 significant digits.
+
+    Integers, booleans, strings and None are untouched, and rounding twice changes nothing more.
+    """
+    match value:
+        case float():
+            return float(f"{value:.{_SIGNIFICANT_DIGITS}g}")
+        case dict():
+            return {k: _round(v) for k, v in value.items()}
+        case list() | tuple():
+            return type(value)(_round(v) for v in value)
+        case _:
+            return value
+
+
+def _quantized[M: Frozen](model: M) -> M:
+    """`model` with every float in it rounded by `_round`."""
+    return type(model).model_validate(_round(model.model_dump()))
 
 
 @dataclass(frozen=True)
@@ -156,12 +185,41 @@ def _count_streams(mission: Mission, specs: Sequence[StreamSpec]) -> list[Stream
     return [s for s in mission_streams(mission, specs) if s.kind is StreamKind.COUNT]
 
 
+def _program_standing(
+    p: str,
+    facts: _Facts,
+    resolution: Resolution,
+    adv: Advantages,
+    resolved: Sequence[ResolvedTarget],
+    w_cum: Mapping[str, float],
+    w_cur: Mapping[str, float],
+) -> ProgramStanding:
+    predicted, unscored = resolution.predicted[p], resolution.unscored[p]
+    return _quantized(
+        ProgramStanding(
+            program=p,
+            name=facts.name,
+            lineage=facts.lineage,
+            w_cumulative=w_cum[p],
+            w_current=w_cur[p],
+            advantage_cumulative=adv.cumulative.get(p, 0.0),
+            advantage_current=adv.current.get(p, 0.0),
+            n_predicted=predicted,
+            coverage=predicted / (predicted + unscored),
+            length_bytes=facts.length_bytes,
+            calibration=calibration([k.scores[p] for k in resolved if p in k.scores]),
+            flags=facts.flags,
+        )
+    )
+
+
 def _stream_standing(
     mission: Mission,
     stream: str,
     resolution: Resolution,
     adv: Advantages,
     awake: Sequence[str],
+    n_withdrawn: int,
     facts: Mapping[str, _Facts],
 ) -> StreamStanding:
     w_cum = normalized_weights(adv.cumulative, awake, mission.tau)
@@ -169,35 +227,21 @@ def _stream_standing(
     resolved = [k for k in resolution.resolved if k.target.stream == stream]
     mixture = [step.score for step in adv.steps if step.target.stream == stream]
     programs = sorted(
-        (
-            ProgramStanding(
-                program=p,
-                name=facts[p].name,
-                lineage=facts[p].lineage,
-                w_cumulative=w_cum[p],
-                w_current=w_cur[p],
-                advantage_cumulative=adv.cumulative.get(p, 0.0),
-                advantage_current=adv.current.get(p, 0.0),
-                n_predicted=resolution.predicted[p],
-                coverage=resolution.predicted[p] / (resolution.predicted[p] + resolution.unscored[p]),
-                length_bytes=facts[p].length_bytes,
-                calibration=calibration([k.scores[p] for k in resolved if p in k.scores]),
-                flags=facts[p].flags,
-            )
-            for p in awake
-        ),
-        key=_order,
+        (_program_standing(p, facts[p], resolution, adv, resolved, w_cum, w_cur) for p in awake), key=_order
     )
-    tv = regime_tv(w_cum, w_cur)
-    return StreamStanding(
-        stream=stream,
-        programs=tuple(programs),
-        regime_tv=tv,
-        regime_flag=tv > mission.regime_flag_tv,
-        mixture_calibration=calibration(mixture),
-        mixture_log_score=sum((score.log_p for score in mixture), 0.0),
-        n_resolved=len(resolved),
-        n_pending=resolution.pending_by_stream.get(stream, 0),
+    tv = _round(regime_tv(w_cum, w_cur))
+    return _quantized(
+        StreamStanding(
+            stream=stream,
+            programs=tuple(programs),
+            regime_tv=tv,
+            regime_flag=tv > mission.regime_flag_tv,
+            mixture_calibration=calibration(mixture),
+            mixture_log_score=sum((score.log_p for score in mixture), 0.0),
+            n_resolved=len(resolved),
+            n_pending=resolution.pending_targets_by_stream.get(stream, 0),
+            n_withdrawn=n_withdrawn,
+        )
     )
 
 
@@ -223,10 +267,12 @@ def _indicators(programs: Sequence[ProgramStanding], facts: Mapping[str, _Facts]
     for p in top:
         by_lineage[p.lineage] += p.w_cumulative
     shares = [by_lineage[lineage] / mass for lineage in sorted(by_lineage)]
-    return Indicators(
-        interface_weight_share=sum(p.w_cumulative for p in top if facts[p.program].has_interface) / mass,
-        readback_clean_share=sum(1 for p in top if not p.flags) / len(top),
-        lineage_entropy=sum(-q * math.log(q) for q in shares if q > 0),
+    return _quantized(
+        Indicators(
+            interface_weight_share=sum(p.w_cumulative for p in top if facts[p.program].has_interface) / mass,
+            readback_clean_share=sum(1 for p in top if not p.flags) / len(top),
+            lineage_entropy=sum(-q * math.log(q) for q in shares if q > 0),
+        )
     )
 
 
@@ -273,11 +319,12 @@ def compute(ws: Workspace, mission: Mission, as_of: int) -> Standings:
     facts: dict[str, _Facts] = {}
     streams = []
     for spec in _count_streams(mission, specs):
-        awake = [p for p in resolution.programs_by_stream.get(spec.id, ()) if p not in withdrawn]
+        recorded = resolution.programs_by_stream.get(spec.id, ())
+        awake = [p for p in recorded if p not in withdrawn]
         for p in awake:
             if p not in facts:
                 facts[p] = _facts(registry, p, _freeze(freezes, p).name)
-        streams.append(_stream_standing(mission, spec.id, resolution, adv, awake, facts))
+        streams.append(_stream_standing(mission, spec.id, resolution, adv, awake, len(recorded) - len(awake), facts))
 
     base = _first_base_stream(mission, specs)
     base_programs = next((s.programs for s in streams if s.stream == base), ())
@@ -286,16 +333,18 @@ def compute(ws: Workspace, mission: Mission, as_of: int) -> Standings:
         | {h for c in claims for pair in c.pairs for h in (pair.asserts, pair.denies)}
         | _ranking_programs(ranking)
     )
-    return Standings(
-        mission=mission.name,
-        epoch=mission.epoch,
-        as_of=as_of,
-        scorer=scorer_hash(),
-        streams=tuple(streams),
-        claims=tuple(claims),
-        ranking=ranking,
-        indicators=_indicators(base_programs, facts),
-        program_names={h: _freeze(freezes, h).name for h in sorted(mentioned)},
+    return _quantized(
+        Standings(
+            mission=mission.name,
+            epoch=mission.epoch,
+            as_of=as_of,
+            scorer=scorer_hash(),
+            streams=tuple(streams),
+            claims=tuple(claims),
+            ranking=ranking,
+            indicators=_indicators(base_programs, facts),
+            program_names={h: _freeze(freezes, h).name for h in sorted(mentioned)},
+        )
     )
 
 
@@ -326,7 +375,7 @@ def _table(header: Sequence[str], rows: Sequence[Sequence[str]]) -> str:
 def _stream_block(stream: StreamStanding) -> list[str]:
     heading = f"### Stream {stream.stream}"
     if not stream.programs:
-        return [heading, "No forecasts yet."]
+        return [heading, "No active programs." if stream.n_withdrawn else "No forecasts yet."]
     regime = "regime shift flagged" if stream.regime_flag else "stable"
     summary = (
         f"Resolved {stream.n_resolved}, pending {stream.n_pending}. "
@@ -438,13 +487,10 @@ def _published_as_of(archive: Archive, mission: Mission, specs: Sequence[StreamS
 
 def _all_standings(ws: Workspace) -> list[Standings]:
     """The standings of every mission with published data, in mission-name order."""
-    if not ws.missions.is_dir():
-        return []
     archive = Archive(ws)
     specs = archive.specs()
-    names = [d.name for d in ws.missions.iterdir() if (d / "mission.json").is_file()]
     standings = []
-    for mission in sorted((load_mission(ws, name) for name in names), key=lambda m: m.name):
+    for mission in (load_mission(ws, name) for name in list_missions(ws)):
         as_of = _published_as_of(archive, mission, specs)
         if as_of is not None:
             standings.append(compute(ws, mission, as_of))
