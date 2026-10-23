@@ -19,7 +19,7 @@ from scienceme.model import Frozen, Intervention, StreamSpec, Target, TargetFilt
 from scienceme.workspace import read_model
 
 MANIFEST_FILE = "program.json"
-_READBACK_FILE = "readback.json"
+READBACK_FILE = "readback.json"
 _PYCACHE = "__pycache__"
 
 
@@ -96,7 +96,7 @@ def program_files(program_dir: Path) -> list[Path]:
         rel = path.relative_to(program_dir)
         if path.is_symlink():
             raise ClosureError(f"{program_dir.name}: symlinks are not allowed in a program, found {rel.as_posix()}")
-        if not path.is_file() or rel == Path(_READBACK_FILE) or _PYCACHE in rel.parts:
+        if not path.is_file() or rel == Path(READBACK_FILE) or _PYCACHE in rel.parts:
             continue
         files.append(rel)
     return sorted(files, key=Path.as_posix)
