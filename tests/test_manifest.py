@@ -12,6 +12,7 @@ from scienceme.manifest import (
     closure_hash,
     in_scope,
     load_manifest,
+    orient_pair,
     program_files,
     supports,
     validate_pair,
@@ -234,6 +235,22 @@ def test_validate_pair_requires_the_claim_to_be_split_the_right_way_round():
     unspecified = d.model_copy(update={"tags": {"school": Tag.ASSERTS}})
     with pytest.raises(PairError, match="covariate-x"):
         validate_pair(a, unspecified, "covariate-x")
+
+
+def test_orient_pair_puts_the_asserting_side_first_whichever_side_declares():
+    a, d = _pair()
+    assert orient_pair(a, "ha", "hd", "covariate-x") == ("ha", "hd")
+    assert orient_pair(d, "hd", "ha", "covariate-x") == ("ha", "hd")
+    assert orient_pair(a, a, d, "covariate-x") == (a, d)  # any pair of values, not only hashes
+
+
+def test_orient_pair_needs_a_stance_on_the_claim():
+    a, _ = _pair()
+    with pytest.raises(PairError, match="'other'"):
+        orient_pair(a, "ha", "hd", "other")
+    unspecified = a.model_copy(update={"tags": {"covariate-x": Tag.UNSPECIFIED}})
+    with pytest.raises(PairError, match="covariate-x"):
+        orient_pair(unspecified, "ha", "hd", "covariate-x")
 
 
 def test_validate_pair_treats_a_missing_tag_as_unspecified():

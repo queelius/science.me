@@ -2,7 +2,7 @@ import pytest
 from helpers import CONST, at, count_spec, make_mission, rt, write_program
 
 from scienceme.claims import ClaimStanding, PairStanding, Verdict, claim_standings, find_pairs, pair_standing, summarize
-from scienceme.manifest import PairDecl, Tag, closure_hash
+from scienceme.manifest import PairDecl, Tag, closure_hash, load_manifest
 from scienceme.mission import Claim
 from scienceme.model import TargetFilter
 from scienceme.registry import Freeze, Registry, RegistryError
@@ -142,6 +142,40 @@ def test_find_pairs_reads_pairs_from_withdrawn_programs_too(ws):
     assert find_pairs(ws, "school") == [(ha, hd)]
 
 
+def _rewrite_manifest(ws, name, **update):
+    program_dir = ws.programs / name
+    edited = load_manifest(program_dir).model_copy(update=update)
+    (program_dir / "program.json").write_text(edited.model_dump_json(), encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "name,update",
+    [
+        ("d", {"tags": {"school": Tag.ASSERTS}}),  # the declarer's stance flipped: the pair would reverse
+        ("d", {"pairs": ()}),  # the declaration removed: the pair would vanish
+        ("a", {"tags": {"school": Tag.DENIES}}),  # the partner's manifest edited
+        ("p", {"author_lineage": "someone else"}),  # an unrelated frozen program: its manifest is read too
+    ],
+)
+def test_find_pairs_refuses_a_manifest_edited_after_freeze(ws, name, update):
+    _freeze_pair(ws)
+    write_program(ws, "p", CONST + "#p\n")
+    Registry(ws).freeze("p", at(5))
+    assert len(find_pairs(ws, "school")) == 1
+    _rewrite_manifest(ws, name, **update)
+    with pytest.raises(RegistryError, match="modified-after-freeze"):
+        find_pairs(ws, "school")
+
+
+def test_claim_standings_refuses_a_manifest_edited_after_freeze(ws):
+    ha, hd = _freeze_pair(ws)
+    res = _resolution(ha, hd, [(0.0, -4.0), (0.0, -4.0)])
+    assert claim_standings(ws, _mission(SCHOOL), res, SPECS)[0].verdict is Verdict.SUPPORTS
+    _rewrite_manifest(ws, "d", tags={"school": Tag.ASSERTS})
+    with pytest.raises(RegistryError, match="modified-after-freeze"):
+        claim_standings(ws, _mission(SCHOOL), res, SPECS)
+
+
 def test_find_pairs_refuses_a_declaration_with_no_stance(ws):
     # Only reachable if a registry entry was written around `freeze`; the pair cannot be oriented.
     ha, _ = _freeze_pair(ws)
@@ -152,7 +186,10 @@ def test_find_pairs_refuses_a_declaration_with_no_stance(ws):
 
 
 def _resolution(ha, hd, scores, predicted=None, unscored=None):
-    """A Resolution holding one resolved target per `scores` pair (a, d log_p), A/B alternating by index."""
+    """A Resolution with one jurisdiction-A target per (a, d) log_p pair in `scores`.
+
+    `predicted` and `unscored` default to every score predicted and none unscored (full coverage).
+    """
     resolved = tuple(rt(i + 1, i + 2, {ha: a, hd: d}) for i, (a, d) in enumerate(scores))
     n = len(scores)
     return Resolution(

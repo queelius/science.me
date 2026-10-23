@@ -15,7 +15,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from enum import StrEnum
 
-from scienceme.manifest import Tag
+from scienceme.manifest import PairError, orient_pair
 from scienceme.mission import Claim, Mission
 from scienceme.model import Frozen, StreamSpec
 from scienceme.registry import Registry, RegistryError
@@ -94,27 +94,26 @@ def summarize(pairs: Sequence[PairStanding]) -> Verdict:
 def find_pairs(ws: Workspace, claim_id: str) -> list[tuple[str, str]]:
     """Every matched pair declared for `claim_id` by a frozen program, as (asserts, denies) closure hashes.
 
-    A pair is oriented by the declaring program's own tag (validated when it was frozen), so it is the
-    same pair whichever side declared it, and it appears once however often it is declared.  Sorted.
-    Withdrawn programs are included.  RegistryError when a frozen manifest cannot be loaded, or declares
-    a pair on a claim it neither asserts nor denies (`freeze` refuses that, so the manifest was tampered with).
+    A pair is oriented by the declaring program's own tag (`orient_pair`), so it is the same pair whichever
+    side declared it, and it appears once however often it is declared.  Sorted.  Withdrawn programs are
+    included.  Every frozen program's manifest is read, so each is `verify`d first: RegistryError
+    ("modified-after-freeze") when any directory changed since its freeze, since an edited stance or pair
+    declaration would otherwise re-sign scores recorded under the old hash.  Also RegistryError when a
+    manifest cannot be loaded, or declares a pair on a claim it neither asserts nor denies (`freeze` refuses
+    that, so only a registry written around it can hold one).
     """
     registry = Registry(ws)
     pairs: set[tuple[str, str]] = set()
     for closure in registry.freezes():
+        registry.verify(closure)
         manifest = registry.manifest(closure)
         for decl in manifest.pairs:
             if decl.claim != claim_id:
                 continue
-            match manifest.tags.get(claim_id, Tag.UNSPECIFIED):
-                case Tag.ASSERTS:
-                    pairs.add((closure, decl.partner))
-                case Tag.DENIES:
-                    pairs.add((decl.partner, closure))
-                case _:
-                    raise RegistryError(
-                        f"{manifest.name!r} declares a pair on {claim_id!r} but neither asserts nor denies it"
-                    )
+            try:
+                pairs.add(orient_pair(manifest, closure, decl.partner, claim_id))
+            except PairError as e:
+                raise RegistryError(str(e)) from e
     return sorted(pairs)
 
 

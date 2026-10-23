@@ -19,9 +19,9 @@ from scienceme.manifest import (
     PairDecl,
     PairError,
     ProgramManifest,
-    Tag,
     closure_hash as hash_directory,
     load_manifest,
+    orient_pair,
     validate_pair,
 )
 from scienceme.model import Frozen
@@ -188,13 +188,10 @@ class Registry:
         except RegistryError as e:
             raise RegistryError(f"pair partner of claim {decl.claim!r}: {e}") from e
         partner = self.manifest(decl.partner)
-        stance = manifest.tags.get(decl.claim, Tag.UNSPECIFIED)
-        if stance is Tag.ASSERTS:
-            asserts, denies = manifest, partner
-        elif stance is Tag.DENIES:
-            asserts, denies = partner, manifest
-        else:
-            raise RegistryError(f"{manifest.name!r} declares a pair on {decl.claim!r} but neither asserts nor denies it")
+        try:
+            asserts, denies = orient_pair(manifest, manifest, partner, decl.claim)
+        except PairError as e:
+            raise RegistryError(str(e)) from e
         try:
             validate_pair(asserts, denies, decl.claim)
         except PairError as e:

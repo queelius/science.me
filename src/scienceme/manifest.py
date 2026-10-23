@@ -142,6 +142,22 @@ def validate_pair(asserts: ProgramManifest, denies: ProgramManifest, claim: str)
         raise PairError("the pair has different lenses")
 
 
+def orient_pair[T](declarer: ProgramManifest, declared: T, partner: T, claim: str) -> tuple[T, T]:
+    """The pair `declarer` declares on `claim`, as (asserts, denies).
+
+    `declared` stands for the declaring program and `partner` for its declared partner (hashes, manifests,
+    anything); the declarer's own tag says which side it is on.  PairError when it neither asserts nor
+    denies `claim`.
+    """
+    match _tag(declarer, claim):
+        case Tag.ASSERTS:
+            return declared, partner
+        case Tag.DENIES:
+            return partner, declared
+        case _:
+            raise PairError(f"{declarer.name!r} declares a pair on {claim!r} but neither asserts nor denies it")
+
+
 def _tag(manifest: ProgramManifest, claim: str) -> Tag:
     return manifest.tags.get(claim, Tag.UNSPECIFIED)
 
