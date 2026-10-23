@@ -1,0 +1,18 @@
+{
+  "name": "lens-ed",
+  "author_lineage": "anthropic/claude",
+  "entry": "program.py",
+  "library": true,
+  "imports": {},
+  "lens": null,
+  "scope": {
+    "streams": null,
+    "roles": null,
+    "jurisdictions": null,
+    "horizons": null
+  },
+  "interface": [],
+  "tags": {},
+  "pairs": [],
+  "supersedes": null
+}

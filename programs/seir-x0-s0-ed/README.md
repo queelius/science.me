@@ -1,0 +1,7 @@
+# seir-x0-s0-ed
+
+This theory is the seasonally forced SEIR model of seir-core, fitted to each jurisdiction's emergency-department visits as seen through lens-ed. It denies the covariate effect: the covariate is ignored, as if transmission did not depend on it. It denies the school effect: school closures, scheduled or imposed, leave transmission unchanged. The strengths are fixed at these values rather than fitted, so the theory makes a definite claim that its forecasts can confirm or refute.
+
+The four seir -ed theories share the same core, lens and fitting procedure and differ only in these two stances, so any two that differ in one stance form a matched pair: their difference in predictive score speaks to that mechanism alone, under the assumptions they share. Because the theory models transmission, it can also forecast intervention arms: a school closure acts through the school effect and a vaccination campaign removes susceptibles at the start of its week.
+
+It is seir-x0-s0 moved to the ED-visits channel: the same frozen seir-core, the same mechanisms, tags and interface, observed through lens-ed instead of lens-admissions and scoped to the `ed-visits` role, so it forecasts every ED-visits stream and no admissions stream. Its matched pairs are with the other -ed theories, in the same pattern as its counterpart's. Its known weakness is seir-core's: the forecasts are under-dispersed, and ED counts, larger and noisier than admissions, make it more visible; lens-ed's floor on the observation noise narrows the gap but does not close it.
