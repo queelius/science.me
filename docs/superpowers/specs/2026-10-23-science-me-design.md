@@ -1,7 +1,13 @@
 # science.me (design document)
 
-**Version:** 0.1 (2026-10-23)
+**Version:** 0.1.1 (2026-10-23)
 **Status:** brainstorm output, pre-plan. The social layer (section 9) is deliberately open.
+
+**Pending decisions (Alex), from the builder check:**
+
+1. Where the pilot's contributions come from: Alex's own agent sessions driven by hand (as on Prove2Me), an orchestration loop the pilot builds, or both. This sets whether a second system gets built and how the success criteria are sized.
+2. Who captains the NHANES standing mission and which sub-literature it covers. The claims, observables, measurement models, and the second survey (whose access terms differ) all follow from this.
+3. The pilot's time horizon and budget, given that criterion 2(b) waits on a real data release.
 **Authors:** Alexander Richard Towell (decisions), Claude (drafting; calls marked as such)
 
 Labels used throughout:
@@ -158,6 +164,8 @@ The Solomonoff/Bayes weights (section 3.5) are the **prior** and regularizer. Th
 
 An evidence item carries an e-value against a stated null with a stated alternative (a likelihood ratio is one), so log E is a log-score difference and the evidence layer and the theory layer are one calculus seen two ways. E-values from independent items multiply. Ville's inequality makes the running product anytime-valid: nobody controls when the next dataset arrives, so optional continuation is the normal case, not an abuse.
 
+**Independence is structural, not declared (Call).** Two evidence items are independent only if their environments have disjoint data and independent collection. A survey cycle is an environment; subpopulations or re-analyses of one cycle are not separate environments. Within one environment, several evidence items for the same claim do not multiply: the committed, pre-specified analysis carries the standing, and variations (multiverse) inform a robustness annotation on that single item. This is what stops re-analysis from manufacturing evidence out of one dataset (section 1.2).
+
 ### 4.5 Truth maintenance (Call)
 
 An assumption-based truth maintenance system (de Kleer 1986) with graded weights:
@@ -269,8 +277,8 @@ A captained bundle, as on Prove2Me: headline goal, the claims and definitions in
 
 Two types (Call):
 
-- **Standing mission**: "establish the standing of the claims in this paper/literature." Milestones are the key published claims; tasks are reproduce / vary / extend / commit.
-- **Frontier mission**: "find a regularity nobody has reported, commit it for the next release." Milestones are environments to cover and streams to commit against; the deliverable is a theory that takes weight.
+- **Standing mission**: "establish the standing of the claims in this paper/literature." Milestones are the key published claims; tasks are reproduce / vary / extend / commit. A published claim is formalized as a **test specification**, not a generative program: observables, environment class, a null, and an alternative equal to the published effect (with its uncertainty). Its standing is the cumulative e-value against that null across independent environments (4.4), plus a robustness annotation from the multiverse task. (Call)
+- **Frontier mission**: "find a regularity nobody has reported, commit it for the next release." Milestones are environments to cover and streams to commit against; the deliverable is a theory as a program (5.3) that takes weight in the mixture (4.3). Theories as programs live here; the standing mission does not require them.
 
 The audit surface is the mission core: claims, falsification criteria, the environments' measurement models. Agents introduce anything below it without audit, as on Prove2Me, because the trusted object is the scoring of audited claims on committed predictions, not the agent's chosen decomposition.
 
@@ -301,7 +309,13 @@ Holdouts rotate as in CASP: each round's holdout becomes public afterward and is
 
 ### 6.3 Contamination policy (Call)
 
-LLM agents have read the public datasets and the papers. A finding on public data may be recall; a prediction on it may be memorized. Therefore: standing earned on public data is provisional; only commitments resolved on post-training-cutoff or custodian-held data are full-weight. The platform records the training-cutoff metadata an agent declares and discounts accordingly. The discount schedule is left to the builder.
+LLM agents have read the public datasets and the papers. A finding on public data may be recall; a prediction on it may be memorized. Therefore, three weight classes (Call):
+
+1. **Full weight**: the commitment's timestamp precedes the environment's public release date, or the environment is custodian-held or synthetic-private. Both facts are mechanical.
+2. **Reduced weight**: the environment was released after the *vendor-published* training cutoff of the model the agent declares. The cutoff and the release date are public facts, not promises, but the declaration of which model ran is a promise; hence reduced, not full.
+3. **Provisional**: everything else, including any self-declared cutoff with no public anchor. This is class 4 of section 6.2.
+
+The discount factors are left to the builder.
 
 ### 6.4 Read-back (carried over from Prove2Me)
 
@@ -359,10 +373,17 @@ Alternatives considered and set aside for the pilot: forecast hubs (closest exis
 - At least two real environments (NHANES plus one other national survey) and one scheduled resolution (the next NHANES cycle).
 - At least three synthetic worlds with private generators, one of them adversarial.
 
+Builder-check resolutions (all Call):
+
+- **The platform executes evidence items itself**, in a sandbox, as Prove2Me verifies server-side. An evidence item exists, and can carry standing, only once the platform has reproduced it; contributor-side results are submissions, not evidence. NHANES is public-domain and redistributable, which makes this possible for the pilot.
+- **Log-score only.** Pilot theories must expose a density (the PPL subset of the reference language). This keeps the e-value-as-likelihood-ratio identity (4.4) exact. Sampler-only theories, and the energy score or CRPS they need, are post-pilot.
+- **Synthetic worlds are environments in the same ledger**, access class synthetic-private, and their missions are ordinary missions. Generators are written and held by someone other than the sessions that propose theories against them, outside any workspace a proposer can read; proposers see only observations and the `do()` interface. Model lineage is not a contamination channel (a model cannot recall a program it wrote in another session), but shared context is.
+- **No Thresholdout accounting in the pilot.** Synthetic-world queries are counted, not budgeted. Real custodian-held and time-locked holdouts are out of scope (8.4).
+
 ### 8.3 Success criteria (falsifiable)
 
 1. Standings move: for the audited claims, the standing after reproduce/vary/extend differs materially from "published = supported" for a nontrivial fraction, with provenance.
-2. At least one committed prediction resolves on post-cutoff data and the platform's calibration (6.6) is reported.
+2. (a) The commitment mechanism is validated end to end on synthetic worlds, where resolution is on demand; (b) at least one committed prediction resolves at full weight (6.3) on a real release, and the platform's calibration (6.6) is reported. (b) is on the release schedule of the data source and may be the pilot's longest pole.
 3. On synthetic worlds, the mixture concentrates on the true generator (or its predictive equivalent) within a budget the builder sets, and injected fake evidence is detected.
 4. At least one person who is not Alex contributes a test.
 5. Someone in the field says the standing report told them something they did not know.
@@ -371,7 +392,7 @@ If 1–3 fail, the mechanism is wrong and no platform is built. If 4–5 fail, t
 
 ### 8.4 Explicitly out of scope for the pilot
 
-Real-money stakes; a public reputation system; moderation; multiple captains; any domain beyond the two above; a UI beyond what agents and the captain need.
+Real-money stakes; a public reputation system; moderation; multiple captains; any domain beyond the two above; a UI beyond what agents and the captain need; real custodian-held or time-locked holdouts and Thresholdout budgeting; sampler-only theories; an orchestration loop that runs proposer agents automatically (see pending decisions, top of document).
 
 ---
 
@@ -438,3 +459,10 @@ Epistemology and statistics
 - Doyle, truth maintenance (1979); de Kleer, ATMS (1986); Dorling, Bayesian resolution of Duhem (1979).
 - Baron, Mellers, Tetlock, Ungar. *Two reasons to make aggregated probability forecasts more extreme.* (2014). Hinton, products of experts (2002).
 - Cramer et al. COVID-19 Forecast Hub ensemble evaluation. PNAS (2022).
+
+---
+
+## 12. Changelog
+
+- **0.1** (2026-10-23): initial draft from the brainstorm.
+- **0.1.1** (2026-10-23): builder check applied. Added: structural independence rule for e-values (4.4); claims as test specifications in standing missions (5.9); three contamination weight classes (6.3); pilot execution model, log-score-only rule, synthetic-world boundary, and holdout scope (8.2); criterion 2 split (8.3); pending decisions for Alex (top).
