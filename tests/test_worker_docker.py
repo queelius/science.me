@@ -7,12 +7,13 @@ from scienceme.archive import Archive
 from scienceme.model import Isolation, Target
 from scienceme.pmf import Pmf
 from scienceme.registry import Registry
-from scienceme.worker import build_order, run_order
+from scienceme.worker import WorkerError, build_order, run_order
 from scienceme.worker_entry import Failure
 
 pytestmark = pytest.mark.docker
 
 STREAM = "w/adm"
+BARE_IMAGE = "scienceme-bare:test"
 TARGET = Target(stream=STREAM, jurisdiction="A", reference_week=2, horizon=0)
 
 NET = (
@@ -83,7 +84,36 @@ def test_container_timeout_kills_the_container(ws, view, docker_image):
     assert running_workers() == ""
 
 
-def test_a_missing_image_is_no_result(ws, view):
-    result = run_in_container(ws, view, "scienceme-no-such-image:0", CONST)
-    assert result == Failure(target=TARGET, error="no-result")
+def test_a_missing_image_is_a_worker_error(ws, view):
+    with pytest.raises(WorkerError, match="exit code 125") as error:
+        run_in_container(ws, view, "scienceme-no-such-image:0", CONST)
+    assert "scienceme-no-such-image" in str(error.value)
     assert running_workers() == ""
+
+
+def test_an_image_without_python_is_a_worker_error(ws, view):
+    subprocess.run(
+        ["docker", "build", "-q", "-t", BARE_IMAGE, "-"],
+        input='FROM scratch\nCMD ["/nothing"]\n',
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    with pytest.raises(WorkerError, match="exit code 127"):
+        run_in_container(ws, view, BARE_IMAGE, CONST)
+
+
+def test_a_program_that_crashes_the_interpreter_fails_its_targets(ws, view, docker_image):
+    code = "import os\ndef predict(ctx, target):\n    os._exit(3)\n"
+    assert run_in_container(ws, view, docker_image, code) == Failure(target=TARGET, error="no-result")
+
+
+def test_container_has_no_capabilities_and_cannot_gain_privileges(ws, view, docker_image):
+    code = (
+        "from scienceme.sdk import Pmf\n"
+        "def predict(ctx, target):\n"
+        "    status = dict(line.split(':\\t', 1) for line in open('/proc/self/status').read().splitlines() if ':\\t' in line)\n"
+        "    caps = int(status['CapEff'], 16) | int(status['CapBnd'], 16)\n"
+        "    return Pmf.point(int(caps == 0 and status['NoNewPrivs'].strip() == '1'))\n"
+    )
+    assert run_in_container(ws, view, docker_image, code).pmf == Pmf.point(1)

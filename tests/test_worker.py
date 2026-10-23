@@ -1,4 +1,7 @@
+import json
+import os
 import re
+import sys
 import tempfile
 from pathlib import Path
 
@@ -6,12 +9,21 @@ import pytest
 from helpers import CONST, PER_TARGET, at, count_spec, publish, write_program
 
 import scienceme.worker
-from scienceme.archive import Archive
+from scienceme.archive import Archive, ArchiveView
 from scienceme.manifest import closure_hash
 from scienceme.model import Isolation, Target
 from scienceme.pmf import Pmf
 from scienceme.registry import Registry, RegistryError
-from scienceme.worker import build_order, prepare_sandbox, run_order, scorer_hash, worker_image
+from scienceme.worker import (
+    MAX_RESULT_BYTES,
+    WorkerError,
+    _read_result,
+    build_order,
+    prepare_sandbox,
+    run_order,
+    scorer_hash,
+    worker_image,
+)
 from scienceme.worker_entry import ORDER_FILE, Failure, Prediction, WorkOrder, WorkResult, program_dirname
 from scienceme.workspace import read_model
 
@@ -121,6 +133,53 @@ def test_sandbox_copy_hashes_like_the_frozen_program(ws, view, tmp_path):
     assert closure_hash(dest / "programs" / program_dirname(h)) == h
 
 
+def test_sandbox_refuses_a_program_edited_after_the_order_was_built(ws, view, tmp_path):
+    h = frozen(ws, "p", CONST)
+    order = build_order(ws, h, view, [tgt()])
+    (ws.programs / "p" / "program.py").write_text(CONST + "# edit\n")
+    with pytest.raises(RegistryError, match="modified-after-freeze"):
+        prepare_sandbox(ws, order, tmp_path / "sandbox")
+
+
+def test_sandbox_refuses_an_import_edited_after_the_order_was_built(ws, view, tmp_path):
+    core = frozen(ws, "core", "X = 1\n", library=True)
+    p = frozen(ws, "p", CONST, imports={"core": core})
+    order = build_order(ws, p, view, [tgt()])
+    (ws.programs / "core" / "extra.py").write_text("Y = 2\n")
+    with pytest.raises(RegistryError, match="modified-after-freeze"):
+        prepare_sandbox(ws, order, tmp_path / "sandbox")
+
+
+def test_sandbox_refuses_a_symlink_added_after_the_order_was_built(ws, view, tmp_path):
+    h = frozen(ws, "p", CONST)
+    order = build_order(ws, h, view, [tgt()])
+    (ws.programs / "p" / "link.py").symlink_to(tmp_path)
+    with pytest.raises(RegistryError, match="modified-after-freeze"):
+        prepare_sandbox(ws, order, tmp_path / "sandbox")
+
+
+def test_sandbox_refuses_a_program_directory_emptied_after_the_order_was_built(ws, view, tmp_path):
+    h = frozen(ws, "p", CONST)
+    order = build_order(ws, h, view, [tgt()])
+    for f in (ws.programs / "p").iterdir():
+        f.unlink()
+    with pytest.raises(RegistryError, match="modified-after-freeze"):
+        prepare_sandbox(ws, order, tmp_path / "sandbox")
+
+
+def test_run_order_refuses_a_program_edited_after_the_order_was_built_and_cleans_up(ws, view, tmp_path, monkeypatch):
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(scratch))
+    h = frozen(ws, "p", CONST)
+    order = build_order(ws, h, view, [tgt()])
+    (ws.programs / "p" / "program.py").write_text(CONST + "# edit\n")
+    for isolation in (Isolation.NONE, Isolation.PROCESS, Isolation.CONTAINER):
+        with pytest.raises(RegistryError, match="modified-after-freeze"):
+            run_order(ws, order, isolation, 30)
+    assert list(scratch.iterdir()) == []
+
+
 # --- run_order: PROCESS ---
 
 
@@ -166,6 +225,11 @@ def test_process_mode_sandbox_properties(ws, view, monkeypatch, probe):
     assert run(ws, view, "p", code)[0].pmf == Pmf.point(1)
 
 
+def test_process_mode_gives_the_program_no_stdin(ws, view):
+    code = "import os\nfrom scienceme.sdk import Pmf\ndef predict(ctx, target):\n    return Pmf.point(int(os.read(0, 1) == b''))\n"
+    assert run(ws, view, "p", code)[0].pmf == Pmf.point(1)
+
+
 # --- run_order: NONE ---
 
 
@@ -205,6 +269,7 @@ NO_RESULT_PROGRAMS = {
     "not-utf8": _scribble("open(out, 'wb').write(b'\\xff\\xfe')"),
     "fifo": _scribble("os.mkfifo(out)"),
     "directory": _scribble("os.mkdir(out)"),
+    "oversize-sparse-file": _scribble("open(out, 'w').truncate(2**41)"),
 }
 
 
@@ -230,6 +295,41 @@ def test_a_result_with_the_targets_in_another_order_is_no_result(ws, view):
     assert results == (Failure(target=a, error="no-result"), Failure(target=b, error="no-result"))
 
 
+def test_a_symlinked_result_is_no_result_even_when_it_points_at_a_valid_one(ws, view):
+    valid = WorkResult(results=(Prediction(target=tgt("A"), pmf=Pmf.point(2)),))
+    code = _scribble(
+        f"open(os.path.join(sys.argv[2], 'real.json'), 'w').write({valid.model_dump_json()!r})\n"
+        "os.symlink('real.json', out)"
+    )
+    assert run(ws, view, "p", code, targets=[tgt("A")]) == (Failure(target=tgt("A"), error="no-result"),)
+
+
+def test_the_result_cap_is_inclusive(tmp_path, monkeypatch):
+    order = WorkOrder(program="sha256:" + "a" * 64, manifests={}, view=ArchiveView(as_of=0, specs={}, vintages={}), targets=(tgt("A"),))
+    result = WorkResult(results=(Prediction(target=tgt("A"), pmf=Pmf.point(2)),))
+    data = result.model_dump_json().encode()
+    (tmp_path / "result.json").write_bytes(data)
+    monkeypatch.setattr(scienceme.worker, "MAX_RESULT_BYTES", len(data))
+    assert _read_result(tmp_path, order) == result
+    monkeypatch.setattr(scienceme.worker, "MAX_RESULT_BYTES", len(data) - 1)
+    assert _read_result(tmp_path, order) == WorkResult(results=(Failure(target=tgt("A"), error="no-result"),))
+
+
+@pytest.mark.skipif(not Path("/proc/self/fd").is_dir(), reason="counts open descriptors through /proc")
+@pytest.mark.parametrize("make", [os.mkdir, os.mkfifo, lambda path: path.write_text("{not json")], ids=["directory", "fifo", "invalid"])
+def test_reading_a_bad_result_leaks_no_descriptor(tmp_path, make):
+    order = WorkOrder(program="sha256:" + "a" * 64, manifests={}, view=ArchiveView(as_of=0, specs={}, vintages={}), targets=(tgt("A"),))
+    make(tmp_path / "result.json")
+    before = len(os.listdir("/proc/self/fd"))
+    for _ in range(5):
+        assert _read_result(tmp_path, order) == WorkResult(results=(Failure(target=tgt("A"), error="no-result"),))
+    assert len(os.listdir("/proc/self/fd")) == before
+
+
+def test_the_result_cap_is_64_mebibytes():
+    assert MAX_RESULT_BYTES == 64 * 1024 * 1024
+
+
 def test_the_exit_code_does_not_decide_the_outcome(ws, view):
     code = "import atexit, os\nfrom scienceme.sdk import Pmf\natexit.register(os._exit, 3)\ndef predict(ctx, target):\n    return Pmf.point(4)\n"
     assert run(ws, view, "p", code)[0].pmf == Pmf.point(4)
@@ -253,6 +353,154 @@ def test_run_cleans_up_after_a_timeout(ws, view, tmp_path, monkeypatch):
     monkeypatch.setattr(tempfile, "tempdir", str(scratch))
     code = "import time\nfrom scienceme.sdk import Pmf\ndef predict(ctx, target):\n    time.sleep(10)\n    return Pmf.point(1)\n"
     assert run(ws, view, "p", code, timeout_s=1)[0] == Failure(target=tgt(), error="timeout")
+    assert list(scratch.iterdir()) == []
+
+
+# --- CONTAINER mode against a stand-in `docker` (the real daemon is exercised in test_worker_docker.py) ---
+
+FAKE_DOCKER = """#!{python}
+import json, os, sys, time
+config = json.load(open(os.environ["FAKE_DOCKER_CONFIG"]))
+with open(config["log"], "a") as f:
+    f.write(json.dumps(sys.argv[1:]) + "\\n")
+if sys.argv[1] == "kill" and config.get("hang_kill"):
+    time.sleep(60)
+if sys.argv[1] == "run":
+    sys.stderr.write(config.get("stderr", ""))
+    sys.stderr.flush()
+    if config.get("hang"):
+        time.sleep(60)
+    sys.exit(config.get("exit", 0))
+"""
+
+
+class FakeDocker:
+    """A `docker` first on PATH that logs its arguments and behaves as `configure` says."""
+
+    def __init__(self, tmp_path: Path, monkeypatch) -> None:
+        bin_dir = tmp_path / "fake-bin"
+        bin_dir.mkdir()
+        script = bin_dir / "docker"
+        script.write_text(FAKE_DOCKER.format(python=sys.executable))
+        script.chmod(0o755)
+        self.log = tmp_path / "docker.log"
+        self.config = tmp_path / "docker.json"
+        monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+        monkeypatch.setenv("FAKE_DOCKER_CONFIG", str(self.config))
+        self.configure()
+
+    def configure(self, **behaviour) -> None:
+        self.config.write_text(json.dumps({"log": str(self.log), **behaviour}))
+
+    def calls(self) -> list[list[str]]:
+        return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
+
+
+@pytest.fixture
+def fake_docker(tmp_path, monkeypatch) -> FakeDocker:
+    return FakeDocker(tmp_path, monkeypatch)
+
+
+def run_container(ws, view, targets=None, timeout_s=30, image="worker:test"):
+    h = frozen(ws, "p", CONST)  # freezing the same content again returns the existing freeze
+    order = build_order(ws, h, view, targets or [tgt()])
+    return run_order(ws, order, Isolation.CONTAINER, timeout_s, image).results
+
+
+def test_container_command_line(ws, view, fake_docker):
+    run_container(ws, view)
+    (call,) = fake_docker.calls()
+    assert call[0] == "run"
+
+    def after(flag):
+        return [call[i + 1] for i, arg in enumerate(call) if arg == flag]
+
+    assert "--rm" in call and "--read-only" in call
+    assert after("--network") == ["none"]
+    assert after("--pull") == ["never"]
+    assert after("--cap-drop") == ["ALL"]
+    assert after("--security-opt") == ["no-new-privileges"]
+    assert after("--memory") == ["2g"] and after("--cpus") == ["1"] and after("--pids-limit") == ["256"]
+    assert after("--tmpfs") == ["/tmp:size=256m"]
+    assert after("--user") == [f"{os.getuid()}:{os.getgid()}"]
+    (name,) = after("--name")
+    assert re.fullmatch(r"sm-[0-9a-f]{32}", name)
+    work_mount, out_mount = after("-v")
+    assert work_mount.endswith(":/work:ro") and out_mount.endswith(":/out")
+    assert call[-7:] == ["worker:test", "python", "-I", "-m", "scienceme.worker_entry", "/work", "/out"]
+
+
+def test_container_names_are_unique_per_run(ws, view, fake_docker):
+    run_container(ws, view)
+    run_container(ws, view)
+    names = [call[call.index("--name") + 1] for call in fake_docker.calls()]
+    assert len(set(names)) == 2
+
+
+def test_container_run_uses_the_worker_image_by_default(ws, view, fake_docker, monkeypatch):
+    monkeypatch.setenv("SCIENCEME_WORKER_IMAGE", "from-env:1")
+    h = frozen(ws, "p", CONST)
+    run_order(ws, build_order(ws, h, view, [tgt()]), Isolation.CONTAINER, 30)
+    assert fake_docker.calls()[0][-7] == "from-env:1"
+
+
+@pytest.mark.parametrize("code", [1, 2, 137])
+def test_a_container_that_dies_without_a_result_is_no_result(ws, view, fake_docker, code):
+    fake_docker.configure(exit=code, stderr="killed")
+    assert run_container(ws, view) == (Failure(target=tgt(), error="no-result"),)
+
+
+@pytest.mark.parametrize("code", [125, 126, 127])
+def test_docker_failing_to_run_the_container_is_a_worker_error_not_a_program_failure(ws, view, fake_docker, code):
+    fake_docker.configure(exit=code, stderr="docker: Error response from daemon: no such image")
+    with pytest.raises(WorkerError) as error:
+        run_container(ws, view)
+    assert f"exit code {code}" in str(error.value)
+    assert "no such image" in str(error.value)
+
+
+def test_the_worker_error_message_truncates_docker_stderr(ws, view, fake_docker):
+    fake_docker.configure(exit=125, stderr="x" * 5000)
+    with pytest.raises(WorkerError) as error:
+        run_container(ws, view)
+    assert "x" * 2000 in str(error.value) and "x" * 2001 not in str(error.value)
+
+
+def test_a_flood_on_stderr_neither_stalls_nor_decides_the_run(ws, view, fake_docker):
+    fake_docker.configure(exit=0, stderr="y" * 5_000_000)
+    assert run_container(ws, view) == (Failure(target=tgt(), error="no-result"),)
+
+
+def test_missing_docker_is_a_worker_error(ws, view, tmp_path, monkeypatch):
+    empty = tmp_path / "empty-bin"
+    empty.mkdir()
+    monkeypatch.setenv("PATH", str(empty))
+    with pytest.raises(WorkerError, match="docker"):
+        run_container(ws, view)
+
+
+def test_container_timeout_kills_the_named_container_and_fails_every_target(ws, view, fake_docker):
+    fake_docker.configure(hang=True)
+    targets = [tgt("A"), tgt("B")]
+    results = run_container(ws, view, targets=targets, timeout_s=1)
+    assert results == (Failure(target=targets[0], error="timeout"), Failure(target=targets[1], error="timeout"))
+    run_call, kill_call = fake_docker.calls()
+    assert kill_call == ["kill", run_call[run_call.index("--name") + 1]]
+
+
+def test_a_docker_kill_that_hangs_does_not_hang_the_run(ws, view, fake_docker, monkeypatch):
+    monkeypatch.setattr(scienceme.worker, "_KILL_TIMEOUT_S", 1)
+    fake_docker.configure(hang=True, hang_kill=True)
+    assert run_container(ws, view, timeout_s=1) == (Failure(target=tgt(), error="timeout"),)
+
+
+def test_container_run_cleans_up_its_directories(ws, view, fake_docker, tmp_path, monkeypatch):
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(scratch))
+    fake_docker.configure(exit=125, stderr="boom")
+    with pytest.raises(WorkerError):
+        run_container(ws, view)
     assert list(scratch.iterdir()) == []
 
 
