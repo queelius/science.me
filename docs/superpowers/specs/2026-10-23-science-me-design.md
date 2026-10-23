@@ -1,7 +1,7 @@
 # science.me (design document)
 
-**Version:** 0.8 (2026-10-23)
-**Status:** brainstorm output, pre-plan. The social layer (section 8) is deliberately open. Reviewed by a different model lineage (Codex) at 0.6; the review is at `docs/superpowers/reviews/2026-10-23-codex-review-of-design-0.6.md` and 0.7 applies it (changelog, section 11). The two decisions left in 0.7 were delegated by Alex to Claude and are made in 7.5 as Calls. Approved as the basis for an implementation plan.
+**Version:** 0.8.1 (2026-10-23)
+**Status:** brainstorm output, pre-plan. The social layer (section 8) is deliberately open. Reviewed by a different model lineage (Codex) at 0.6; the review is at `docs/superpowers/reviews/2026-10-23-codex-review-of-design-0.6.md` and 0.7 applies it (changelog, section 11). The two decisions left in 0.7 were delegated by Alex to Claude and are made in 7.5 as Calls. Approved as the basis for an implementation plan; the tier 1 plan is `docs/superpowers/plans/2026-10-23-science-me-tier1.md`, and 0.8.1 carries the corrections writing it exposed.
 **Authors:** Alexander Richard Towell (decisions), Claude (drafting; calls marked as such), Codex (review of 0.6)
 
 Labels:
@@ -95,8 +95,9 @@ Carried over unchanged: statement/proof separation, immutability, atomization, m
 **Programs.** A directory `programs/<name>/` containing:
 
 - `program.py`: given the archive as of an origin and a target specification (stream, jurisdiction, reference date, horizon), returns a **predictive pmf** over the target's integer values (or the hub's quantile set, 4.3). May import other programs. May declare a structural interface (4.6). May declare a narrower scope than the mission's full target set (4.4).
-- `README.md`: a natural-language account of what it assumes and why, with three-valued **tags** per claim of interest (4.5).
-- `readback.md`: written by a different model lineage than the author's, stating what the program literally assumes (4.8).
+- `program.json`: the structured manifest: imports at exact hashes, the lens import, declared scope, the structural interface (4.6), three-valued **tags** per claim of interest (4.5), and matched-pair declarations. It is frozen with the code, so tags and scope cannot be changed after outcomes are seen (Call, 0.8.1).
+- `README.md`: a natural-language account of what it assumes and why. Prose only; nothing is parsed out of it.
+- `readback.json`: written by a different model lineage than the author's, stating what the program literally assumes, with the tags and interface it infers from the code (4.8). It is the one file excluded from the closure hash.
 
 A program's identity is the hash of its **entire dependency closure**: its own source, every import at the exact hash imported, and any fitted artifacts it ships. Changing any of these creates a new program with a new freeze time (4.7).
 
@@ -117,11 +118,11 @@ One pure function, one program, pinned in a container, with a worker that sees o
 ```
 score(program, origin, target) =
     pmf ← run program on archive(as of origin) for target
-    pmf ← (1 − ε) · pmf + ε · floor          (ε declared; floor = baseline's pmf)
+    pmf ← (1 − ε) · pmf + ε · floor          (ε declared; floor = uniform on {0..support_max})
     log pmf(realized value at resolution vintage)
 ```
 
-The scorer scores **the submitted distribution**, which is what makes the log score proper; it does not project samples onto a parametric family, because that projection can be exploited by misreporting the variance (review, finding 2). Programs that simulate convert their own samples to a pmf; that conversion is theirs. The ε-floor bounds the loss of any single target at −log ε and is what makes 3.6's reversibility true in practice; ε is declared per mission and is a known compromise of strict propriety at the floor. Quantiles and WIS are computed from the same pmf for comparability with the forecast hubs, but standing uses the log score.
+The scorer scores **the submitted distribution**, which is what makes the log score proper; it does not project samples onto a parametric family, because that projection can be exploited by misreporting the variance (review, finding 2). Programs that simulate convert their own samples to a pmf; that conversion is theirs. The floor is uniform over the stream's declared support, so the loss of any single target is at most −log ε + log(support_max + 1), and that bound is what makes 3.6's reversibility true in practice. An earlier draft used the baseline's pmf as the floor, which does not bound the loss: a realized value in the baseline's far tail still costs hundreds of nats (corrected in 0.8.1); ε is declared per mission and is a known compromise of strict propriety at the floor. Quantiles and WIS are computed from the same pmf for comparability with the forecast hubs, but standing uses the log score.
 
 A failed or timed-out run produces **no score**: the target is marked unscored for that program, which affects its coverage (4.4). A fallback prediction is never attributed to the program (review, finding 10).
 
@@ -136,6 +137,8 @@ weight(program) ∝ exp( Σ scores on common opportunities / τ )
 These are **tempered exponential predictive weights**, declared as such, and not Bayesian posterior beliefs: scores summed across correlated jurisdictions overcount shared information, and the temperature τ (declared per mission, with the number of jurisdictions as the default scale) is the acknowledged correction. The Hedge bound, that the mixture's cumulative loss is within log(1/π_i) of any fixed program's, holds under fixed prior masses and common opportunities, both of which 4.4 now supplies; it says nothing about population-scale multiple comparisons, and the design no longer claims it does. Standings still report mixture weights and never a single best program.
 
 Two quantities are reported, because they answer different questions (review, finding 14): **cumulative standing**, the undiscounted sum, which is the evidential record; and **current usefulness**, the same sum under exponential forgetting with a declared half-life, which is what the forecast hubs and the wanted list care about during a changing epidemic. **Cumulative standing is the standing** (Call, delegated; 7.5): it drives claim standings (4.5) and is the headline in `STANDINGS.md`. Current usefulness drives the mission's forecast mixture and the wanted list (4.10), whose job is choosing the next observation, not keeping the record. The half-life is declared per mission before its first origin; changing it is a labeled change. When the two rankings disagree sharply, the disagreement is reported as a regime-change flag and feeds the wanted list, since it says the past has stopped being a good guide to the present.
+
+The common-opportunity rule is the sleeping-experts (specialists) algorithm of Freund, Schapire, Singer and Warmuth (1997): a program that did not predict a target is charged the mixture's loss there, and the mixture at each target is formed over the programs that did predict it. Two reporting consequences (0.8.1): weights are normalized over the programs awake on a stream, and each program's standing is reported as its **advantage over the mixture** in nats beside its weight. Without this, a program that predicts nothing would inherit the mixture's total and be listed with near-top weight.
 
 Length is **not** in the weights. It is reported per program as a diagnostic, and used to choose the canonical member when two programs are predictively identical. Predictive near-duplicates are reported, not clustered into the weights: agreement on past targets is not equivalence on future interventions, and splitting weight by cluster membership invited a claim-level Sybil attack (review, finding 6). Sybil resistance at the hypothesis level is a social-layer question (section 8).
 
@@ -205,8 +208,9 @@ science-me/
   scorer/                  # the trusted program; container spec; tests
   archive/                 # raw source captures with provenance (kernel-written)
   transforms/<stream>/     # versioned programs: raw capture -> table
-  programs/<name>/         # program.py, README.md (tags), readback.md
-  missions/<name>.md       # targets, horizons, lag, held-out masks, claims (scope), wanted list, epsilon, tau, captain
+  programs/<name>/         # program.json (manifest, tags), program.py, README.md (prose), readback.json
+  missions/<name>/         # mission.json (targets, horizons, lag, held-out masks, claims with scope, epsilon, tau, captain), wanted.jsonl, README.md
+  registry/freezes.jsonl   # append-only freeze and withdrawal records
   scores/                  # the prospective record; append-only
   STANDINGS.md             # generated; CI fails when stale
   standings.json           # the same, machine-readable (5.4)
@@ -267,7 +271,7 @@ The kernel (4.9) is deliberately dumb. Everything that requires judgment is done
 | Predict an experiment's outcome | an item on the wanted list | a committed predictive pmf for it, scored when fulfilled (4.10) |
 | Propose a repair | a program's score dropped, or its held-out score is poor | a new program (new closure, new freeze time) with a README saying what changed and why; it earns evidence from its freeze onward (4.7) |
 | Translate the literature | a mission's claim of interest cites a paper | a program encoding the paper's mechanism, tagged, with its scope |
-| Write a read-back | any new program | `readback.md`, by a different lineage |
+| Write a read-back | any new program | `readback.json`, by a different lineage |
 | Shorten the library | several programs share code | a shared program others import (DreamCoder's sleep phase) |
 | Draft or edit a mission | a captain's request, or a new stream | a mission file for the human to spot-check |
 
@@ -356,7 +360,7 @@ Alternatives set aside: NHANES (two-year cycle, latest release already in traini
 
 ### 7.2 Scope
 
-- One mission, `missions/influenza-2026-27.md`: targets (NHSN admissions, jurisdictions, horizons 0 to 3 weeks), information cutoff rule, resolution lag, held-out jurisdictions, claims of interest with scope, wanted list, ε, τ, half-life, exploration reserve, captain (an LLM, 4.8).
+- One mission, `missions/influenza-2026-27/`: targets (NHSN admissions, jurisdictions, horizons 0 to 3 weeks), information cutoff rule, resolution lag, held-out jurisdictions, claims of interest with scope, wanted list, ε, τ, half-life, exploration reserve, captain (an LLM, 4.8).
 - Three synthetic generators (two compartmental with different lenses, one adversarial), each with replicate worlds, a baseline arm and at least two intervention arms, each the subject of a mission file.
 - A flexible mechanism-free program and the hub baseline in every mission.
 - The library seeded with the standard epidemic models as programs (4.13) before the first real vintage is scored.
@@ -431,6 +435,7 @@ Pilot domain: FluSight forecast hub, 2026–27 specification (cdcepi/FluSight-fo
 
 ## 11. Changelog
 
+- **0.8.1** (2026-10-23): corrections found while writing the tier 1 plan. The floor is uniform over the declared support, because a baseline floor does not bound the loss (4.3). Structured files replace parsed prose, following Alex's standing rule: `program.json` carries tags, scope, interface and pairs and is frozen with the code; `mission.json`, `wanted.jsonl`, `readback.json`, `registry/freezes.jsonl` (4.1, 4.11, 5.2). The common-opportunity rule is named as sleeping experts, and standings normalize over awake programs and report advantage over the mixture, so a program that predicts nothing never appears with weight (4.4).
 - **0.8** (2026-10-23): the two 0.7 decisions made as delegated Calls: corroboration passes given tier 1's power check (6.3, 7.3, 7.5); cumulative standing is the standing, current usefulness steers the mixture and the wanted list, with a regime-change flag (4.4, 7.5). Approved as the basis for an implementation plan.
 - **0.7** (2026-10-23): Codex review of 0.6 applied (`docs/superpowers/reviews/`). Eligibility against the source's information cutoff with an as-of archive (4.1, 4.2); programs submit pmfs, scored directly with an ε-floor, no projection (4.3); common-opportunity scoring for newcomers and specialists, tempered weights declared as non-Bayesian, length and duplicates out of the weights, cumulative versus current usefulness (4.4); three-valued tags and matched pairs only (4.5); held-out score renamed, surgery only through a declared interface, no fallback scores (4.6); the prospective record is immutable and corrections are labeled (4.7); raw captures and worker isolation in the kernel (4.9); gain over supporting subsets, calibration as the adequacy check, exploration reserve (4.10); 3.5, 3.8, 3.9, 3.10, 3.11 softened; pilot target narrowed to NHSN lab-confirmed admissions with FluSight vocabulary, ILINet and 2020–21 demoted to context, replicate worlds and matched budgets in the criteria (7); two pending decisions (7.5).
 - **0.6** (2026-10-23): fulfillers, cost-per-bit priority, targeted gain, votes as predictions.
