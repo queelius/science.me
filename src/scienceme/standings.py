@@ -480,7 +480,7 @@ def render(all_standings: Sequence[Standings]) -> str:
 # --- the generated files ---
 
 
-def _published_as_of(archive: Archive, mission: Mission, specs: Sequence[StreamSpec]) -> int | None:
+def published_as_of(archive: Archive, mission: Mission, specs: Sequence[StreamSpec]) -> int | None:
     """The largest issue published on any of the mission's COUNT streams; None when nothing is."""
     return max((i for s in _count_streams(mission, specs) for i in archive.issues(s.id)), default=None)
 
@@ -491,7 +491,7 @@ def _all_standings(ws: Workspace) -> list[Standings]:
     specs = archive.specs()
     standings = []
     for mission in (load_mission(ws, name) for name in list_missions(ws)):
-        as_of = _published_as_of(archive, mission, specs)
+        as_of = published_as_of(archive, mission, specs)
         if as_of is not None:
             standings.append(compute(ws, mission, as_of))
     return standings
