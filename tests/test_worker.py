@@ -1,0 +1,300 @@
+import re
+import tempfile
+from pathlib import Path
+
+import pytest
+from helpers import CONST, PER_TARGET, at, count_spec, publish, write_program
+
+import scienceme.worker
+from scienceme.archive import Archive
+from scienceme.manifest import closure_hash
+from scienceme.model import Isolation, Target
+from scienceme.pmf import Pmf
+from scienceme.registry import Registry, RegistryError
+from scienceme.worker import build_order, prepare_sandbox, run_order, scorer_hash, worker_image
+from scienceme.worker_entry import ORDER_FILE, Failure, Prediction, WorkOrder, WorkResult, program_dirname
+from scienceme.workspace import read_model
+
+STREAM = "w/adm"
+
+
+def tgt(jurisdiction="A", horizon=0) -> Target:
+    return Target(stream=STREAM, jurisdiction=jurisdiction, reference_week=2, horizon=horizon)
+
+
+@pytest.fixture
+def view(ws):
+    publish(ws, count_spec(), 3, {("A", 1): 5, ("B", 1): 6}, at(1))
+    return Archive(ws).view([STREAM], as_of=3, published_by=at(2))
+
+
+def frozen(ws, name, code, **fields) -> str:
+    """Write and freeze program `name`; return its closure hash."""
+    write_program(ws, name, code, **fields)
+    return Registry(ws).freeze(name, at(0)).closure_hash
+
+
+def run(ws, view, name, code, isolation=Isolation.PROCESS, timeout_s=30, targets=None) -> tuple:
+    """Freeze `code` as program `name`, run it on `targets` (default one target) and return the results."""
+    h = frozen(ws, name, code)
+    order = build_order(ws, h, view, targets or [tgt()])
+    return run_order(ws, order, isolation, timeout_s).results
+
+
+def files_under(root: Path) -> set[str]:
+    return {p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()}
+
+
+# --- build_order ---
+
+
+def test_build_order_holds_the_manifest_of_every_closure_member(ws, view):
+    core = frozen(ws, "core", "X = 1\n", library=True)
+    p = frozen(ws, "p", CONST, imports={"core": core})
+    frozen(ws, "unrelated", CONST + "#u\n")
+    order = build_order(ws, p, view, [tgt(), tgt(horizon=1)])
+    assert order.program == p
+    assert set(order.manifests) == {core, p}
+    assert order.manifests[p].imports == {"core": core}
+    assert order.view == view
+    assert order.targets == (tgt(), tgt(horizon=1))
+
+
+def test_build_order_refuses_a_program_modified_after_freezing(ws, view):
+    h = frozen(ws, "p", CONST)
+    (ws.programs / "p" / "program.py").write_text(CONST + "# edit\n")
+    with pytest.raises(RegistryError, match="modified-after-freeze"):
+        build_order(ws, h, view, [tgt()])
+
+
+def test_build_order_refuses_a_modified_import(ws, view):
+    core = frozen(ws, "core", "X = 1\n", library=True)
+    p = frozen(ws, "p", CONST, imports={"core": core})
+    (ws.programs / "core" / "program.py").write_text("X = 2\n")
+    with pytest.raises(RegistryError, match="modified-after-freeze"):
+        build_order(ws, p, view, [tgt()])
+
+
+def test_build_order_refuses_a_hash_that_is_not_frozen(ws, view):
+    with pytest.raises(RegistryError, match="not frozen"):
+        build_order(ws, "sha256:" + "a" * 64, view, [tgt()])
+
+
+# --- prepare_sandbox ---
+
+
+def test_sandbox_contains_only_the_closure(ws, view, tmp_path):
+    core_dir = write_program(ws, "core", "X = 1\n", library=True)
+    (core_dir / "sub").mkdir()
+    (core_dir / "sub" / "util.py").write_text("Y = 2\n")
+    (core_dir / "sub" / "readback.json").write_text("{}")  # only the top-level readback is excluded
+    core = Registry(ws).freeze("core", at(0)).closure_hash
+    p = frozen(ws, "p", CONST, imports={"core": core})
+    frozen(ws, "unrelated", CONST + "#u\n")
+    (core_dir / "readback.json").write_text("{}")  # written after freezing
+    (core_dir / "__pycache__").mkdir()
+    (core_dir / "__pycache__" / "x.pyc").write_bytes(b"x")
+
+    order = build_order(ws, p, view, [tgt()])
+    dest = tmp_path / "sandbox"
+    prepare_sandbox(ws, order, dest)
+
+    core_dirname, p_dirname = program_dirname(core), program_dirname(p)
+    assert files_under(dest / "programs") == {
+        f"{core_dirname}/program.json",
+        f"{core_dirname}/program.py",
+        f"{core_dirname}/README.md",
+        f"{core_dirname}/sub/util.py",
+        f"{core_dirname}/sub/readback.json",
+        f"{p_dirname}/program.json",
+        f"{p_dirname}/program.py",
+        f"{p_dirname}/README.md",
+    }
+    assert {child.name for child in dest.iterdir()} == {"programs", "order.json"}
+    assert read_model(dest / ORDER_FILE, WorkOrder) == order
+
+
+def test_sandbox_copy_hashes_like_the_frozen_program(ws, view, tmp_path):
+    h = frozen(ws, "p", CONST)
+    dest = tmp_path / "sandbox"
+    prepare_sandbox(ws, build_order(ws, h, view, [tgt()]), dest)
+    assert closure_hash(dest / "programs" / program_dirname(h)) == h
+
+
+# --- run_order: PROCESS ---
+
+
+def test_process_mode_end_to_end(ws, view):
+    targets = [tgt("A", 0), tgt("A", 1), tgt("B", 0)]
+    results = run(ws, view, "p", PER_TARGET, targets=targets)
+    assert [r.target for r in results] == targets
+    assert results[0] == Prediction(target=targets[0], pmf=Pmf.point(0))
+    assert results[1] == Prediction(target=targets[1], pmf=Pmf.point(1))
+    assert isinstance(results[2], Failure) and "boom" in results[2].error
+
+
+def test_process_mode_runs_a_program_with_imports(ws, view):
+    core = frozen(ws, "core", "def level():\n    return 3\n", library=True)
+    code = (
+        "from scienceme.sdk import Pmf, imports_of\n"
+        "IMPORTS = imports_of(__name__)\n"
+        "def predict(ctx, target):\n    return Pmf.point(IMPORTS['core'].level())\n"
+    )
+    p = frozen(ws, "p", code, imports={"core": core})
+    results = run_order(ws, build_order(ws, p, view, [tgt()]), Isolation.PROCESS, 30).results
+    assert results[0].pmf == Pmf.point(3)
+
+
+def test_process_timeout_fails_every_target(ws, view):
+    code = "import time\nfrom scienceme.sdk import Pmf\ndef predict(ctx, target):\n    time.sleep(10)\n    return Pmf.point(1)\n"
+    targets = [tgt("A"), tgt("B")]
+    results = run(ws, view, "p", code, timeout_s=1, targets=targets)
+    assert results == (Failure(target=targets[0], error="timeout"), Failure(target=targets[1], error="timeout"))
+
+
+@pytest.mark.parametrize(
+    "probe",
+    [
+        pytest.param("'SCIENCEME_SECRET' not in os.environ", id="clean-environment"),
+        pytest.param("os.path.isfile('order.json')", id="cwd-is-the-sandbox"),
+        pytest.param("'pytest' not in sys.modules", id="separate-process"),
+    ],
+)
+def test_process_mode_sandbox_properties(ws, view, monkeypatch, probe):
+    monkeypatch.setenv("SCIENCEME_SECRET", "x")
+    code = f"import os, sys\nfrom scienceme.sdk import Pmf\ndef predict(ctx, target):\n    return Pmf.point(int({probe}))\n"
+    assert run(ws, view, "p", code)[0].pmf == Pmf.point(1)
+
+
+# --- run_order: NONE ---
+
+
+def test_none_mode_runs_in_this_process(ws, view):
+    code = "import sys\nfrom scienceme.sdk import Pmf\ndef predict(ctx, target):\n    return Pmf.point(int('pytest' in sys.modules))\n"
+    assert run(ws, view, "p", code, Isolation.NONE)[0].pmf == Pmf.point(1)
+
+
+def test_none_mode_isolates_failures_per_target(ws, view):
+    targets = [tgt("A", 1), tgt("B", 0)]
+    results = run(ws, view, "p", PER_TARGET, Isolation.NONE, targets=targets)
+    assert results[0].pmf == Pmf.point(1)
+    assert isinstance(results[1], Failure) and "boom" in results[1].error
+
+
+# --- run_order: the result file decides ---
+
+# Run inside the sandbox: `sys.argv[2]` is the output directory.
+_SCRIBBLE = (
+    "import os, sys\n"
+    "from scienceme.sdk import Pmf\n"
+    "def predict(ctx, target):\n"
+    "    out = os.path.join(sys.argv[2], 'result.json')\n"
+    "{body}"
+    "    os._exit(0)\n"
+)
+
+
+def _scribble(body: str) -> str:
+    return _SCRIBBLE.format(body="".join(f"    {line}\n" for line in body.splitlines()))
+
+
+NO_RESULT_PROGRAMS = {
+    "never-written": _scribble("pass"),
+    "invalid-json": _scribble("open(out, 'w').write('{not json')"),
+    "invalid-model": _scribble("open(out, 'w').write('{\"results\": [{\"kind\": \"nonsense\"}]}')"),
+    "not-utf8": _scribble("open(out, 'wb').write(b'\\xff\\xfe')"),
+    "fifo": _scribble("os.mkfifo(out)"),
+    "directory": _scribble("os.mkdir(out)"),
+}
+
+
+@pytest.mark.parametrize("code", NO_RESULT_PROGRAMS.values(), ids=NO_RESULT_PROGRAMS)
+def test_missing_or_invalid_result_fails_every_target_as_no_result(ws, view, code):
+    targets = [tgt("A"), tgt("B")]
+    results = run(ws, view, "p", code, targets=targets)
+    assert results == (Failure(target=targets[0], error="no-result"), Failure(target=targets[1], error="no-result"))
+
+
+def test_a_result_for_other_targets_is_no_result(ws, view):
+    other = WorkResult(results=(Prediction(target=tgt("B", 1), pmf=Pmf.point(2)),))
+    code = _scribble(f"open(out, 'w').write({other.model_dump_json()!r})")
+    results = run(ws, view, "p", code, targets=[tgt("A")])
+    assert results == (Failure(target=tgt("A"), error="no-result"),)
+
+
+def test_a_result_with_the_targets_in_another_order_is_no_result(ws, view):
+    a, b = tgt("A"), tgt("B")
+    swapped = WorkResult(results=(Prediction(target=b, pmf=Pmf.point(2)), Prediction(target=a, pmf=Pmf.point(2))))
+    code = _scribble(f"open(out, 'w').write({swapped.model_dump_json()!r})")
+    results = run(ws, view, "p", code, targets=[a, b])
+    assert results == (Failure(target=a, error="no-result"), Failure(target=b, error="no-result"))
+
+
+def test_the_exit_code_does_not_decide_the_outcome(ws, view):
+    code = "import atexit, os\nfrom scienceme.sdk import Pmf\natexit.register(os._exit, 3)\ndef predict(ctx, target):\n    return Pmf.point(4)\n"
+    assert run(ws, view, "p", code)[0].pmf == Pmf.point(4)
+
+
+# --- run_order: housekeeping ---
+
+
+@pytest.mark.parametrize("isolation", [Isolation.NONE, Isolation.PROCESS])
+def test_run_cleans_up_its_directories(ws, view, tmp_path, monkeypatch, isolation):
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(scratch))
+    assert run(ws, view, "p", CONST, isolation)[0].pmf == Pmf.point(7)
+    assert list(scratch.iterdir()) == []
+
+
+def test_run_cleans_up_after_a_timeout(ws, view, tmp_path, monkeypatch):
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(scratch))
+    code = "import time\nfrom scienceme.sdk import Pmf\ndef predict(ctx, target):\n    time.sleep(10)\n    return Pmf.point(1)\n"
+    assert run(ws, view, "p", code, timeout_s=1)[0] == Failure(target=tgt(), error="timeout")
+    assert list(scratch.iterdir()) == []
+
+
+# --- worker_image and scorer_hash ---
+
+
+def test_worker_image_defaults_and_honours_the_environment(monkeypatch):
+    monkeypatch.delenv("SCIENCEME_WORKER_IMAGE", raising=False)
+    assert worker_image() == "scienceme-worker:latest"
+    monkeypatch.setenv("SCIENCEME_WORKER_IMAGE", "registry.example/worker:1")
+    assert worker_image() == "registry.example/worker:1"
+
+
+def test_scorer_hash_has_the_closure_hash_format_and_is_stable():
+    assert re.fullmatch(r"sha256:[0-9a-f]{64}", scorer_hash())
+    assert scorer_hash() == scorer_hash()
+
+
+def test_scorer_hash_covers_paths_and_python_content_only(tmp_path, monkeypatch):
+    package = tmp_path / "scienceme"
+    (package / "sub").mkdir(parents=True)
+    (package / "a.py").write_text("A = 1\n")
+    (package / "sub" / "b.py").write_text("B = 1\n")
+    monkeypatch.setattr(scienceme.worker, "_PACKAGE_DIR", package)
+    base = scorer_hash()
+
+    (package / "notes.txt").write_text("not python")
+    (package / "__pycache__").mkdir()
+    (package / "__pycache__" / "a.cpython-313.pyc").write_bytes(b"x")
+    assert scorer_hash() == base
+
+    (package / "a.py").write_text("A = 2\n")
+    edited = scorer_hash()
+    assert edited != base
+    (package / "a.py").write_text("A = 1\n")
+    assert scorer_hash() == base
+
+    (package / "sub" / "b.py").rename(package / "sub" / "c.py")
+    assert scorer_hash() not in (base, edited)
+
+
+def test_scorer_hash_is_over_the_installed_package(monkeypatch):
+    real = scorer_hash()
+    monkeypatch.setattr(scienceme.worker, "_PACKAGE_DIR", Path(scienceme.__file__).parent)
+    assert scorer_hash() == real

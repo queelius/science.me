@@ -1,0 +1,6 @@
+# The worker image needs only what scorer/Dockerfile copies.
+*
+!pyproject.toml
+!scorer/requirements.lock
+!src
+**/__pycache__

@@ -1,3 +1,5 @@
+import shutil
+
 import pytest
 from helpers import CONST, at, write_program
 
@@ -283,3 +285,51 @@ def test_closure_deduplicates_shared_imports_and_orders_depth_first(ws):
     ht = r.freeze("top", at(3)).closure_hash
     assert r.closure(ht) == [hb, hl, hr, ht]
     assert r.closure(hb) == [hb]
+
+
+# --- closure and manifest on a tampered registry (R8) ---
+
+
+def test_closure_terminates_on_a_manifest_that_imports_itself(ws):
+    r = Registry(ws)
+    write_program(ws, "p", CONST)
+    h = r.freeze("p", at(0)).closure_hash
+    write_program(ws, "p", CONST, imports={"me": h})  # tampered after freezing: p now imports its own hash
+    assert r.closure(h) == [h]
+    with pytest.raises(RegistryError, match="modified-after-freeze"):
+        r.verify(h)
+
+
+def test_closure_terminates_on_an_import_cycle(ws):
+    r = Registry(ws)
+    write_program(ws, "a", "A = 1\n", library=True)
+    ha = r.freeze("a", at(0)).closure_hash
+    write_program(ws, "b", CONST, imports={"a": ha})
+    hb = r.freeze("b", at(1)).closure_hash
+    write_program(ws, "a", "A = 1\n", library=True, imports={"b": hb})  # tampered: a now imports b, which imports a
+    assert r.closure(hb) == [ha, hb]
+    with pytest.raises(RegistryError, match="modified-after-freeze"):
+        r.verify(ha)
+
+
+def test_closure_reports_a_missing_program_directory_as_a_registry_error(ws):
+    r = Registry(ws)
+    write_program(ws, "core", "X = 1\n", library=True)
+    hc = r.freeze("core", at(0)).closure_hash
+    write_program(ws, "p", CONST, imports={"core": hc})
+    hp = r.freeze("p", at(1)).closure_hash
+    shutil.rmtree(ws.programs / "core")
+    with pytest.raises(RegistryError, match="program.json"):
+        r.closure(hp)
+
+
+@pytest.mark.parametrize("content", ["{not json", "", '{"name": "p"}', '{"name": "p", "author_lineage": "t", "bogus": 1}'])
+def test_closure_reports_an_unreadable_manifest_as_a_registry_error(ws, content):
+    r = Registry(ws)
+    d = write_program(ws, "p", CONST)
+    h = r.freeze("p", at(0)).closure_hash
+    (d / "program.json").write_text(content)
+    with pytest.raises(RegistryError, match="program.json"):
+        r.closure(h)
+    with pytest.raises(RegistryError, match="program.json"):
+        r.manifest(h)

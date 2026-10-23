@@ -76,8 +76,15 @@ class Registry:
         return self._ws.programs / self._frozen(closure_hash).name
 
     def manifest(self, closure_hash: str) -> ProgramManifest:
-        """The manifest of the frozen program, as currently on disk (call `verify` to know it is unmodified)."""
-        return load_manifest(self.program_dir(closure_hash))
+        """The manifest of the frozen program, as currently on disk (call `verify` to know it is unmodified).
+
+        RegistryError when the program is not frozen or its `program.json` is missing or invalid.
+        """
+        program_dir = self.program_dir(closure_hash)
+        try:
+            return load_manifest(program_dir)
+        except (OSError, ValueError) as e:
+            raise RegistryError(f"{program_dir.name}: cannot load program.json: {e}") from e
 
     def freeze(self, name: str, now: datetime) -> Freeze:
         """Freeze `programs/<name>` at `now` and return the record.
@@ -148,12 +155,19 @@ class Registry:
             )
 
     def closure(self, closure_hash: str) -> list[str]:
-        """The program's transitive imports first (depth first, each once), then the program itself."""
+        """The program's transitive imports first (depth first, each once), then the program itself.
+
+        Manifests are read as they are on disk, so a tampered one can import itself or form a cycle; every
+        program is visited once, which ends the walk.  RegistryError when a program in the closure is not
+        frozen or has no readable manifest; `verify` each member to know the closure is unmodified.
+        """
         order: list[str] = []
+        visited: set[str] = set()
 
         def visit(h: str) -> None:
-            if h in order:
+            if h in visited:
                 return
+            visited.add(h)
             for dependency in self.manifest(h).imports.values():
                 visit(dependency)
             order.append(h)

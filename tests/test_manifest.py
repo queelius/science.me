@@ -12,6 +12,7 @@ from scienceme.manifest import (
     closure_hash,
     in_scope,
     load_manifest,
+    program_files,
     supports,
     validate_pair,
 )
@@ -68,6 +69,22 @@ def test_hash_ignores_only_the_top_level_readback(ws):
     (d / "lib").mkdir()
     (d / "lib" / "readback.json").write_text("{}")
     assert closure_hash(d) != h
+
+
+def test_program_files_are_the_hashed_files_in_posix_order(ws):
+    d = write_program(ws, "p", CONST)
+    for rel in ("a/b.py", "a-b.py", "a.py", "lib/readback.json", "lib/__pycache__/x.pyc", "readback.json"):
+        (d / rel).parent.mkdir(parents=True, exist_ok=True)
+        (d / rel).write_text("x")
+    assert [f.as_posix() for f in program_files(d)] == [
+        "README.md",
+        "a-b.py",
+        "a.py",
+        "a/b.py",
+        "lib/readback.json",
+        "program.json",
+        "program.py",
+    ]
 
 
 def test_hash_depends_on_content_not_on_directory_name_or_location(ws, tmp_path):

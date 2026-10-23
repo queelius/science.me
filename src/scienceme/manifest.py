@@ -81,8 +81,8 @@ def load_manifest(program_dir: Path) -> ProgramManifest:
     return read_model(program_dir / MANIFEST_FILE, ProgramManifest)
 
 
-def closure_hash(program_dir: Path) -> str:
-    """`sha256:` plus the digest of every file under `program_dir`, by relative path and content.
+def program_files(program_dir: Path) -> list[Path]:
+    """The files that make up the program, as paths relative to `program_dir`, sorted by POSIX path.
 
     `readback.json` (at the top level; it is written after freezing) and
     anything under a `__pycache__` directory are not part of the program.
@@ -91,15 +91,22 @@ def closure_hash(program_dir: Path) -> str:
     """
     if not program_dir.is_dir():
         raise FileNotFoundError(f"not a program directory: {program_dir}")
-    entries = []
+    files = []
     for path in program_dir.rglob("*"):
         rel = path.relative_to(program_dir)
         if path.is_symlink():
             raise ClosureError(f"{program_dir.name}: symlinks are not allowed in a program, found {rel.as_posix()}")
         if not path.is_file() or rel == Path(_READBACK_FILE) or _PYCACHE in rel.parts:
             continue
-        entries.append([rel.as_posix(), hashlib.sha256(path.read_bytes()).hexdigest()])
-    entries.sort()
+        files.append(rel)
+    return sorted(files, key=Path.as_posix)
+
+
+def closure_hash(program_dir: Path) -> str:
+    """`sha256:` plus the digest of every file of the program (see `program_files`), by relative path and content."""
+    entries = [
+        [rel.as_posix(), hashlib.sha256((program_dir / rel).read_bytes()).hexdigest()] for rel in program_files(program_dir)
+    ]
     return "sha256:" + hashlib.sha256(json.dumps(entries, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
