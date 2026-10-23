@@ -213,9 +213,12 @@ def _pair():
     return a, d
 
 
+CX = frozenset({"covariate-x"})
+
+
 def test_validate_pair():
     a, d = _pair()
-    validate_pair(a, d, "covariate-x")
+    validate_pair(a, d, CX)
     for bad in (
         a.model_copy(update={"name": "d"}),
         d.model_copy(update={"tags": {"covariate-x": Tag.DENIES, "school": Tag.DENIES}}),
@@ -223,18 +226,65 @@ def test_validate_pair():
         d.model_copy(update={"scope": TargetFilter(jurisdictions=("A",))}),
     ):
         with pytest.raises(PairError):
-            validate_pair(a, bad, "covariate-x")
+            validate_pair(a, bad, CX)
 
 
 def test_validate_pair_requires_the_claim_to_be_split_the_right_way_round():
     a, d = _pair()
     with pytest.raises(PairError, match="covariate-x"):
-        validate_pair(d, a, "covariate-x")
+        validate_pair(d, a, CX)
     with pytest.raises(PairError, match="covariate-x"):
-        validate_pair(a, a, "covariate-x")
+        validate_pair(a, a, CX)
     unspecified = d.model_copy(update={"tags": {"school": Tag.ASSERTS}})
     with pytest.raises(PairError, match="covariate-x"):
-        validate_pair(a, unspecified, "covariate-x")
+        validate_pair(a, unspecified, CX)
+
+
+def _flat_pair():
+    """Two programs that differ on one mechanism tagged at two scopes, `covariate-x` and `covariate-x-flat`."""
+    a, _ = _pair()
+
+    def tags(cx: Tag) -> dict[str, Tag]:
+        return {"covariate-x": cx, "covariate-x-flat": cx, "school": Tag.ASSERTS}
+
+    asserting = a.model_copy(update={"tags": tags(Tag.ASSERTS)})
+    return asserting, asserting.model_copy(update={"name": "d", "tags": tags(Tag.DENIES)})
+
+
+def test_validate_pair_over_a_set_of_claims():
+    a, d = _flat_pair()
+    validate_pair(a, d, frozenset({"covariate-x", "covariate-x-flat"}))
+
+
+def test_validate_pair_refuses_a_difference_on_an_undeclared_claim():
+    a, d = _flat_pair()
+    with pytest.raises(PairError, match="differs on claim 'covariate-x-flat'"):
+        validate_pair(a, d, CX)
+    with pytest.raises(PairError, match="differs on claim 'school'"):
+        school_too = d.model_copy(update={"tags": {**d.tags, "school": Tag.DENIES}})
+        validate_pair(a, school_too, frozenset({"covariate-x", "covariate-x-flat"}))
+
+
+def test_validate_pair_refuses_a_declared_claim_that_is_not_split():
+    a, d = _flat_pair()
+    with pytest.raises(PairError, match="school"):
+        validate_pair(a, d, frozenset({"covariate-x", "covariate-x-flat", "school"}))
+
+
+def test_validate_pair_refuses_mixed_orientation_across_the_set():
+    a, d = _flat_pair()
+    a = a.model_copy(update={"tags": {**a.tags, "covariate-x-flat": Tag.DENIES}})
+    d = d.model_copy(update={"tags": {**d.tags, "covariate-x-flat": Tag.ASSERTS}})
+    with pytest.raises(PairError, match="covariate-x-flat"):
+        validate_pair(a, d, frozenset({"covariate-x", "covariate-x-flat"}))
+
+
+def test_validate_pair_needs_a_nonempty_set_of_claims():
+    a, d = _pair()
+    with pytest.raises(PairError, match="at least one claim"):
+        validate_pair(a, d, frozenset())
+    with pytest.raises(TypeError):
+        validate_pair(a, d, "covariate-x")  # a str would iterate as its characters
 
 
 def test_orient_pair_puts_the_asserting_side_first_whichever_side_declares():
@@ -256,26 +306,23 @@ def test_orient_pair_needs_a_stance_on_the_claim():
 def test_validate_pair_treats_a_missing_tag_as_unspecified():
     a = ProgramManifest(name="a", author_lineage="t", tags={"x": Tag.ASSERTS, "other": Tag.UNSPECIFIED})
     d = ProgramManifest(name="d", author_lineage="t", tags={"x": Tag.DENIES})
-    validate_pair(a, d, "x")  # "other" is explicit UNSPECIFIED on one side, missing on the other
+    x = frozenset({"x"})
+    validate_pair(a, d, x)  # "other" is explicit UNSPECIFIED on one side, missing on the other
     with pytest.raises(PairError, match="other"):
-        validate_pair(
-            a.model_copy(update={"tags": {"x": Tag.ASSERTS, "other": Tag.ASSERTS}}), d, "x"
-        )
+        validate_pair(a.model_copy(update={"tags": {"x": Tag.ASSERTS, "other": Tag.ASSERTS}}), d, x)
     with pytest.raises(PairError, match="other"):
-        validate_pair(
-            a, d.model_copy(update={"tags": {"x": Tag.DENIES, "other": Tag.DENIES}}), "x"
-        )
+        validate_pair(a, d.model_copy(update={"tags": {"x": Tag.DENIES, "other": Tag.DENIES}}), x)
 
 
 def test_validate_pair_lens_rules():
     a, d = _pair()
     bare_a = a.model_copy(update={"imports": {}, "lens": None})
     bare_d = d.model_copy(update={"imports": {}, "lens": None})
-    validate_pair(bare_a, bare_d, "covariate-x")  # no lens on either side
+    validate_pair(bare_a, bare_d, CX)  # no lens on either side
     with pytest.raises(PairError, match="lens"):
-        validate_pair(a, bare_d, "covariate-x")  # lens on one side only
+        validate_pair(a, bare_d, CX)  # lens on one side only
     with pytest.raises(PairError, match="lens"):
-        validate_pair(bare_a, d, "covariate-x")
+        validate_pair(bare_a, d, CX)
     # The alias may differ as long as it resolves to the same hash.
     renamed = d.model_copy(update={"imports": {"other-name": LENS_HASH}, "lens": "other-name"})
-    validate_pair(a, renamed, "covariate-x")
+    validate_pair(a, renamed, CX)

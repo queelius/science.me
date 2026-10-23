@@ -40,7 +40,10 @@ class InterfaceVar(Frozen):
 
 
 class PairDecl(Frozen):
-    """A declared matched-pair partner for `claim`, by closure hash."""
+    """A declared matched-pair partner for `claim`, by closure hash.
+
+    A program's declarations that name the same partner make one pair over all their claims (`validate_pair`).
+    """
 
     claim: str
     partner: str
@@ -73,7 +76,7 @@ class ClosureError(ValueError):
 
 
 class PairError(ValueError):
-    """Raised by `validate_pair` when two programs are not a matched pair for a claim."""
+    """Raised by `validate_pair` when two programs are not a matched pair for a set of claims."""
 
 
 def load_manifest(program_dir: Path) -> ProgramManifest:
@@ -122,20 +125,30 @@ def in_scope(manifest: ProgramManifest, target: Target, spec: StreamSpec) -> boo
     return not manifest.library and manifest.scope.matches(target, spec)
 
 
-def validate_pair(asserts: ProgramManifest, denies: ProgramManifest, claim: str) -> None:
-    """Raise PairError unless the two programs differ only in their stance on `claim`.
+def validate_pair(asserts: ProgramManifest, denies: ProgramManifest, claims: frozenset[str]) -> None:
+    """Raise PairError unless the two programs differ only in their stance on `claims`.
 
-    `asserts` must assert `claim` and `denies` must deny it; every other
-    claim must be tagged identically (a missing tag is UNSPECIFIED); the scopes
-    must be equal; and the lenses must be both absent or the same import.
+    `claims` is usually one claim; several when they are one mechanism at different scopes (a claim and its
+    restriction to where the mechanism cannot act, say), which any pair differing in the mechanism differs on
+    together.  `asserts` must assert and `denies` must deny every claim in `claims`; every other claim must be
+    tagged identically (a missing tag is UNSPECIFIED); the scopes must be equal; and the lenses must be both
+    absent or the same import.  PairError for an empty `claims`; TypeError for a `str`, which would be read
+    as a set of characters.
     """
-    if _tag(asserts, claim) is not Tag.ASSERTS:
-        raise PairError(f"{asserts.name!r} does not assert {claim!r}")
-    if _tag(denies, claim) is not Tag.DENIES:
-        raise PairError(f"{denies.name!r} does not deny {claim!r}")
-    for other in sorted((set(asserts.tags) | set(denies.tags)) - {claim}):
+    if isinstance(claims, str):
+        raise TypeError(f"claims must be a set of claim ids, not the string {claims!r}")
+    claims = frozenset(claims)
+    if not claims:
+        raise PairError("a pair must be declared over at least one claim")
+    for claim in sorted(claims):
+        if _tag(asserts, claim) is not Tag.ASSERTS:
+            raise PairError(f"{asserts.name!r} does not assert {claim!r}")
+        if _tag(denies, claim) is not Tag.DENIES:
+            raise PairError(f"{denies.name!r} does not deny {claim!r}")
+    declared = ", ".join(repr(c) for c in sorted(claims))
+    for other in sorted((set(asserts.tags) | set(denies.tags)) - claims):
         if _tag(asserts, other) is not _tag(denies, other):
-            raise PairError(f"the pair differs on claim {other!r}, not only on {claim!r}")
+            raise PairError(f"the pair differs on claim {other!r}, not only on {declared}")
     if asserts.scope != denies.scope:
         raise PairError("the pair has different scopes")
     if _lens_hash(asserts) != _lens_hash(denies):

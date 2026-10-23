@@ -263,6 +263,61 @@ def test_pair_that_differs_on_another_claim_refused_with_pair_error_chained(ws):
     assert exc.value.__cause__ is not None
 
 
+def flat_tags(cx: Tag, school: Tag) -> dict[str, Tag]:
+    """One covariate mechanism tagged at two scopes, plus the school claim."""
+    return {"covariate-x": cx, "covariate-x-flat": cx, "school": school}
+
+
+def covariate_pairs(partner: str) -> tuple[PairDecl, ...]:
+    return tuple(PairDecl(claim=c, partner=partner) for c in ("covariate-x", "covariate-x-flat"))
+
+
+def test_a_pair_over_two_claims_freezes(ws):
+    r = Registry(ws)
+    write_program(ws, "x1s1", CONST, tags=flat_tags(Tag.ASSERTS, Tag.ASSERTS))
+    h11 = r.freeze("x1s1", at(0)).closure_hash
+    write_program(ws, "x0s1", CONST + "#x0s1\n", tags=flat_tags(Tag.DENIES, Tag.ASSERTS), pairs=covariate_pairs(h11))
+    h01 = r.freeze("x0s1", at(1)).closure_hash
+    write_program(ws, "x1s0", CONST + "#x1s0\n", tags=flat_tags(Tag.ASSERTS, Tag.DENIES))
+    h10 = r.freeze("x1s0", at(2)).closure_hash
+    # two partners, each validated over its own set of claims
+    pairs = (*covariate_pairs(h10), PairDecl(claim="school", partner=h01))
+    write_program(ws, "x0s0", CONST + "#x0s0\n", tags=flat_tags(Tag.DENIES, Tag.DENIES), pairs=pairs)
+    assert r.freeze("x0s0", at(3)).name == "x0s0"
+
+
+def test_a_pair_differing_on_an_undeclared_claim_is_refused(ws):
+    r = Registry(ws)
+    write_program(ws, "x1s1", CONST, tags=flat_tags(Tag.ASSERTS, Tag.ASSERTS))
+    h = r.freeze("x1s1", at(0)).closure_hash
+    only_one = (PairDecl(claim="covariate-x", partner=h),)
+    write_program(ws, "x0s1", CONST + "#x0s1\n", tags=flat_tags(Tag.DENIES, Tag.ASSERTS), pairs=only_one)
+    with pytest.raises(RegistryError, match="differs on claim 'covariate-x-flat'"):
+        r.freeze("x0s1", at(1))
+
+
+def test_a_declared_claim_that_is_not_split_is_refused(ws):
+    r = Registry(ws)
+    write_program(ws, "x1s1", CONST, tags=flat_tags(Tag.ASSERTS, Tag.ASSERTS))
+    h = r.freeze("x1s1", at(0)).closure_hash
+    pairs = (*covariate_pairs(h), PairDecl(claim="school", partner=h))
+    write_program(ws, "x0s1", CONST + "#x0s1\n", tags=flat_tags(Tag.DENIES, Tag.ASSERTS), pairs=pairs)
+    with pytest.raises(RegistryError, match="school") as exc:
+        r.freeze("x0s1", at(1))
+    assert exc.value.__cause__ is not None
+
+
+def test_a_pair_with_mixed_orientation_across_its_claims_is_refused(ws):
+    r = Registry(ws)
+    write_program(ws, "p", CONST, tags={"school": Tag.ASSERTS, "x": Tag.DENIES})
+    h = r.freeze("p", at(0)).closure_hash
+    pairs = (PairDecl(claim="school", partner=h), PairDecl(claim="x", partner=h))
+    write_program(ws, "q", CONST + "#q\n", tags={"school": Tag.DENIES, "x": Tag.ASSERTS}, pairs=pairs)
+    with pytest.raises(RegistryError, match="'x'"):
+        r.freeze("q", at(1))
+    assert r.by_name("q") is None
+
+
 def test_pair_partner_modified_after_freeze_refused(ws):
     da = write_program(ws, "a", CONST, tags={"school": Tag.ASSERTS})
     r = Registry(ws)

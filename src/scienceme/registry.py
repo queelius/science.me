@@ -16,7 +16,6 @@ from pydantic import AwareDatetime, Field, TypeAdapter
 
 from scienceme.manifest import (
     ClosureError,
-    PairDecl,
     PairError,
     ProgramManifest,
     closure_hash as hash_directory,
@@ -120,8 +119,11 @@ class Registry:
         for alias, dependency in manifest.imports.items():
             if dependency not in frozen:
                 raise RegistryError(f"import {alias!r} ({dependency}) is not frozen")
+        claims_by_partner: dict[str, set[str]] = {}
         for decl in manifest.pairs:
-            self._check_pair(manifest, decl)
+            claims_by_partner.setdefault(decl.partner, set()).add(decl.claim)
+        for partner, claims in claims_by_partner.items():
+            self._check_pair(manifest, partner, frozenset(claims))
 
         record = Freeze(name=name, closure_hash=digest, frozen_at=now)
         append_jsonl(self._ws.registry, record)
@@ -181,18 +183,23 @@ class Registry:
             raise RegistryError(f"{closure_hash} is not frozen")
         return freeze
 
-    def _check_pair(self, manifest: ProgramManifest, decl: PairDecl) -> None:
-        """Validate the declared pair, oriented by which side asserts `decl.claim` (R2: PairError becomes RegistryError)."""
+    def _check_pair(self, manifest: ProgramManifest, partner_hash: str, claims: frozenset[str]) -> None:
+        """Validate the pair with `partner_hash` over every claim declared for it (R9).
+
+        The pair is oriented by the declarer's tag on the first claim in sorted order; `validate_pair` then
+        requires the same orientation on the rest.  A PairError becomes a RegistryError (R2).
+        """
+        declared = ", ".join(repr(c) for c in sorted(claims))
         try:
-            self.verify(decl.partner)
+            self.verify(partner_hash)
         except RegistryError as e:
-            raise RegistryError(f"pair partner of claim {decl.claim!r}: {e}") from e
-        partner = self.manifest(decl.partner)
+            raise RegistryError(f"pair partner of claim {declared}: {e}") from e
+        partner = self.manifest(partner_hash)
         try:
-            asserts, denies = orient_pair(manifest, manifest, partner, decl.claim)
+            asserts, denies = orient_pair(manifest, manifest, partner, min(claims))
         except PairError as e:
             raise RegistryError(str(e)) from e
         try:
-            validate_pair(asserts, denies, decl.claim)
+            validate_pair(asserts, denies, claims)
         except PairError as e:
             raise RegistryError(f"{manifest.name!r} is not a matched pair with {partner.name!r}: {e}") from e

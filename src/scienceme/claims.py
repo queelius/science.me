@@ -1,12 +1,13 @@
 """Claims over matched pairs.
 
 A claim's standing is model-relative predictive support, read from *matched pairs* only: two frozen
-programs that differ solely in their stance on the claim (`validate_pair`, enforced when the pair is
-frozen).  For a pair, `delta_nats` is the summed log-score difference `log_p[asserts] - log_p[denies]`
-over the resolved targets in the claim's scope that both programs predicted.  Tempered by the mission's
-`tau`, a delta of at least `threshold` supports the claim and one of at most `-threshold` contradicts
-it; anything between is insufficient evidence.  A pair is dropped when either member covers too few of
-its targets (`mission.coverage_min`), so a pair that mostly failed to run cannot speak for the claim.
+programs that differ solely in their stance on the claim, or on a set of claims declared together that
+are one mechanism at several scopes (`validate_pair`, enforced when the pair is frozen).  For a pair,
+`delta_nats` is the summed log-score difference `log_p[asserts] - log_p[denies]` over the resolved
+targets in the claim's scope that both programs predicted.  Tempered by the mission's `tau`, a delta of
+at least `threshold` supports the claim and one of at most `-threshold` contradicts it; anything between
+is insufficient evidence.  A pair is dropped when either member covers too few of its targets
+(`mission.coverage_min`), so a pair that mostly failed to run cannot speak for the claim.
 Programs are identified by closure hash throughout.
 """
 
