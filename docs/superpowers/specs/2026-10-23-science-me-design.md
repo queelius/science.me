@@ -1,6 +1,6 @@
 # science.me (design document)
 
-**Version:** 0.5 (2026-10-23)
+**Version:** 0.6 (2026-10-23)
 **Status:** brainstorm output, pre-plan. The social layer (section 8) is deliberately open. Drafted by one model lineage; a review by a different lineage is pending before approval (6.2, item 10).
 **Authors:** Alexander Richard Towell (decisions), Claude (drafting; calls marked as such)
 
@@ -84,7 +84,7 @@ Unchanged from 0.2 in substance; tightened.
 8. **Severity (Call).** A test counts in proportion to how probably it would have failed had the theory been wrong: committed before the data, on targets the program had not seen, differing from what the mixture already predicted. All three are facts in git history.
 9. **Messiness is functional (Decided).** Standings are cumulative scores, so they move by bounded amounts per week and never toggle.
 10. **Interventions are program surgery (Call).** For a program that exposes its assignments, `do(X = x)` is: replace the assignment of X, leave the rest. Derived, not authored, correct by construction relative to the declared structure. The structure *is* the causal claim, and two observationally equivalent programs that differ in one assignment's parents differ in what they predict on an intervention arm.
-11. **Intelligence is abundant; observations are scarce (Decided).** Programs cost compute. Discriminating observations cost calendar time, instruments, and people. The binding constraint on real evidence is time, so the platform's throughput is bits of evidence per week, and its levers are breadth of streams, observing where programs disagree, and synthetic worlds that compress time. Data found in the wild is context for generating theories, not evidence, because current models have read it.
+11. **Intelligence is abundant; observations are scarce (Decided).** Programs cost compute. Discriminating observations cost calendar time, instruments, and people. The binding constraint on real evidence is time, so the platform's throughput is bits of evidence per week, and its levers are breadth of streams, observing where programs disagree, and synthetic worlds that compress time. Data found in the wild is context for generating theories, not evidence, because current models have read it. The long-run scaling path is fulfillers that take requests from agents, from the synthetic custodian to human collaborators to automated cloud laboratories; that integration is out of the pilot's scope, but the interface to it is not (4.10).
 
 ---
 
@@ -167,7 +167,11 @@ Contamination policy is binary: a score counts iff committed before the vintage,
 
 ### 4.10 Wanted observations and expected information gain
 
-A mission file carries a **wanted list**: candidate observations proposed by agents (an intervention arm on a synthetic world, a new stream with its puller program, a real experiment or data pull someone could perform). For each candidate the kernel computes its **expected information gain**: the mutual information between the candidate observation and program identity under the current mixture, which is the entropy of the mixture's predictive minus the weighted entropies of the programs' predictives, all from samples the programs already produce (with surgery applied for arms). Agents propose; the kernel ranks; the synthetic custodian fulfills automatically; humans fulfill real ones in order.
+A mission file carries a **wanted list**: candidate observations proposed by agents (an intervention arm on a synthetic world, a new stream with its puller program, a real experiment or data pull someone could perform). For each candidate the kernel computes its **expected information gain**: the mutual information between the candidate observation and program identity under the current mixture, which is the entropy of the mixture's predictive minus the weighted entropies of the programs' predictives, all from samples the programs already produce (with surgery applied for arms). Agents propose; the kernel ranks; **fulfillers** act. A fulfiller is anything that turns a wanted item into a vintage: the synthetic custodian (automatic, zero latency, the pilot's cloud lab), a human collaborator, or eventually an automated laboratory with an API. Each fulfiller declares a **cost** for an item; priority is expected information gain per unit cost. Cost is declared by whoever would pay it, never voted.
+
+Expected information gain can be computed about program identity in general or **targeted** at a claim of interest: how much the observation would move the standing of the humidity claim, say. Missions weight their claims of interest, and priority uses targeted gain. That is how human values enter prioritization without anyone voting on experiments.
+
+**Votes are predictions (Call, from Alex's proposal that the community vote on proposed experiments).** An opinion that an experiment is worth running is cheap talk. The scorable form of that opinion is a committed predictive distribution for the experiment's outcome, recorded against the wanted item and scored when it is fulfilled. Disagreement among committed predictions is information gain computed over judgments rather than over programs, and it adds what the mixture cannot see, such as a suspicion that every program is wrong. In the pilot these predictions are recorded and scored but not weighted into priority; weighting by track record is the reputation system, which is the social layer (section 8).
 
 The standings also report the mixture's entropy and the expected information gain of the next scheduled vintage. Together they are an **allocation signal**: when programs agree, more data is useless and the hypothesis space needs new programs; when they disagree, data is the bottleneck and the wanted list is what to spend on.
 
@@ -248,6 +252,7 @@ Each agent session, as `SKILL.md` will describe it:
 | Propose a theory | a claim of interest with no program on one side; a mechanism from the literature absent from the mixture | a program with README and tags |
 | Request an observation | top programs disagree on a hypothetical arm, regime, or measurement | an entry in the mission's wanted list; the kernel attaches its expected information gain (4.10) |
 | Propose a stream | a public, regularly updated source would discriminate programs or open a domain | a puller program the kernel runs (4.9) |
+| Predict an experiment's outcome | an item on the wanted list | a committed predictive distribution for it, scored when fulfilled (4.10) |
 | Assign blame | a program's score dropped, or its invariance score is poor | a supersession of the theory, a lens, or a shared program, with a README saying why |
 | Translate the literature | a mission's claim of interest cites a paper | a program encoding the paper's mechanism, tagged |
 | Write a read-back | any new program | `readback.md`, by a different lineage |
@@ -368,7 +373,7 @@ Deliberately undecided. Alex's instruction: copy existing systems where possible
 3. **Conflict**: who adjudicates a contested read-back. Prove2Me: captains plus moderators.
 4. **Diversity and cascades**: blind phases before discussion is visible; weighting by lineage diversity; rewarding dissent that later wins.
 5. **Agenda**: how captains are recruited.
-6. **Markets**: play-money markets over claim standings as the human-facing layer.
+6. **Markets**: play-money markets over claim standings as the human-facing layer. Note that 4.10 already makes votes on experiments into scored predictions; a market is the same thing with stakes.
 
 Sources: Prove2Me; the forecast hubs; Metaculus; Polymath; Stack Exchange; CASP.
 
@@ -407,6 +412,7 @@ Pilot domain: Mathis et al., FluSight evaluation, Nature Communications (2024). 
 - **0.1** (2026-10-23): initial draft from the brainstorm.
 - **0.1.1** (2026-10-23): builder check applied.
 - **0.2** (2026-10-23): Alex's decisions applied: respiratory surveillance stream, synthetic worlds for feedback on demand, LLM captain, contributions from Alex's agent loops; interventions as surgery; lenses; vintages.
+- **0.6** (2026-10-23): fulfillers (custodian, humans, cloud labs) as backends to the wanted list, cost-per-bit priority, targeted information gain as the entry point for human values, and votes on experiments as committed predictions (4.10, 3.11, 5.2, 8).
 - **0.5** (2026-10-23): self-criticism pass. Added: indicators per anti-goal (2); near-duplicate clustering (4.4); matched-pair claim standings (4.5); honesty about the pilot kernel and external anchoring (4.9); the none-of-the-above check (4.10); the library and the seeding discipline (4.13, Alex's proposal); known weaknesses and abandonment criteria (6.2, 6.3); different-lineage review pending (status).
 - **0.4** (2026-10-23): economics inverted (Decided: intelligence is abundant, observations are scarce). Added: commitment 11; wanted lists with kernel-computed expected information gain and the allocation signal (4.10); the puller as a kernel component (4.9); mixture weights as the look-elsewhere correction (4.4); observation-request and stream-proposal tasks (5.2); directed-versus-undirected collection as a pilot criterion (7.3).
 - **0.3** (2026-10-23): simplification pass (KISS). Two kinds of created object (data vintages, programs); programs are the commitments; scores are a cache; claims are tags; environments are masks; interventions are arms; recompute replaces truth maintenance; one scorer (negative binomial by moments) and one weight rule; binary contamination rule; git as the substrate; no web service. Section 4.12 lists what was dropped and when it returns. Added section 5, the engine: agentic intelligence as a first principle (Decided), the agent loop, the task table, and the three checkers.
