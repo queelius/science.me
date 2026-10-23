@@ -2,135 +2,71 @@
   {
     "mission": "w-alpha",
     "epoch": 1,
-    "as_of": 4,
+    "as_of": 10,
     "scorer": "sha256:39142f859177d34d66e6bda0695a7f87a6cb3769122b12a7feae29801a93cf4f",
     "streams": [
       {
         "stream": "w-alpha/admissions",
         "programs": [
           {
-            "program": "sha256:e475946b8225daf660f1d146e0a883b7124d03ad78a9dfef00753b6d479daca3",
-            "name": "flex-loglinear",
-            "lineage": "anthropic/claude",
-            "w_cumulative": 0.166666666667,
-            "w_current": 0.166666666667,
-            "advantage_cumulative": 0.0,
-            "advantage_current": 0.0,
-            "n_predicted": 0,
-            "coverage": 0.0,
-            "length_bytes": 12083,
-            "calibration": {
-              "pit": [
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0
-              ],
-              "coverage_50": null,
-              "coverage_90": null,
-              "n": 0
-            },
-            "flags": [
-              "missing"
-            ]
-          },
-          {
             "program": "sha256:03484b90a2100c4d5cf9a15e780ea909b5d4a30fe1f3e0c4b4866d98ffd1f17e",
             "name": "hub-baseline",
             "lineage": "anthropic/claude",
-            "w_cumulative": 0.166666666667,
-            "w_current": 0.166666666667,
-            "advantage_cumulative": 0.0,
-            "advantage_current": 0.0,
-            "n_predicted": 16,
+            "w_cumulative": 0.988880569352,
+            "w_current": 0.953221470283,
+            "advantage_cumulative": -7.67016554642,
+            "advantage_current": -6.04083160276,
+            "n_predicted": 112,
             "coverage": 1.0,
             "length_bytes": 11389,
             "calibration": {
               "pit": [
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0
+                0.0378787874962,
+                0.0378787874962,
+                0.0378787874962,
+                0.0378787874962,
+                0.0378787874962,
+                0.0459255360469,
+                0.0714987056121,
+                0.0378787874962,
+                0.287878787496,
+                0.367424245868
               ],
-              "coverage_50": null,
-              "coverage_90": null,
-              "n": 0
+              "coverage_50": 0.231060604148,
+              "coverage_90": 0.77811556633,
+              "n": 24
             },
             "flags": [
               "missing"
             ]
           },
           {
-            "program": "sha256:de077e4f1f8d8067ee49dd6ca577ed6ac030bef5e7e14eb4ea6634744fff979f",
-            "name": "seir-x0-s0",
+            "program": "sha256:e475946b8225daf660f1d146e0a883b7124d03ad78a9dfef00753b6d479daca3",
+            "name": "flex-loglinear",
             "lineage": "anthropic/claude",
-            "w_cumulative": 0.166666666667,
-            "w_current": 0.166666666667,
-            "advantage_cumulative": 0.0,
-            "advantage_current": 0.0,
-            "n_predicted": 16,
-            "coverage": 1.0,
-            "length_bytes": 31335,
+            "w_cumulative": 0.0111183121326,
+            "w_current": 0.0465565409234,
+            "advantage_cumulative": -25.6220858451,
+            "advantage_current": -18.1175506492,
+            "n_predicted": 80,
+            "coverage": 0.714285714286,
+            "length_bytes": 12083,
             "calibration": {
               "pit": [
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0
+                0.0252525249974,
+                0.0252525249974,
+                0.0252525249974,
+                0.0252525249974,
+                0.0252525249974,
+                0.0252525249974,
+                0.0252525249974,
+                0.0252525249974,
+                0.0252525249974,
+                0.772727275023
               ],
-              "coverage_50": null,
-              "coverage_90": null,
-              "n": 0
-            },
-            "flags": [
-              "missing"
-            ]
-          },
-          {
-            "program": "sha256:c5bf0e5a3b2f595c8a9ec8e979dcda0010f1ecb88f7b9e42927cceca7ca0326e",
-            "name": "seir-x0-s1",
-            "lineage": "anthropic/claude",
-            "w_cumulative": 0.166666666667,
-            "w_current": 0.166666666667,
-            "advantage_cumulative": 0.0,
-            "advantage_current": 0.0,
-            "n_predicted": 16,
-            "coverage": 1.0,
-            "length_bytes": 31279,
-            "calibration": {
-              "pit": [
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0
-              ],
-              "coverage_50": null,
-              "coverage_90": null,
-              "n": 0
+              "coverage_50": 0.126262624987,
+              "coverage_90": 0.227272724977,
+              "n": 4
             },
             "flags": [
               "missing"
@@ -140,29 +76,29 @@
             "program": "sha256:c50a99e377fec8913a89861562df2cfa655d36eac1e64b2e8825198b2382435a",
             "name": "seir-x1-s0",
             "lineage": "anthropic/claude",
-            "w_cumulative": 0.166666666667,
-            "w_current": 0.166666666667,
-            "advantage_cumulative": 0.0,
-            "advantage_current": 0.0,
-            "n_predicted": 16,
-            "coverage": 1.0,
+            "w_cumulative": 5.38835472635e-7,
+            "w_current": 0.000100994804696,
+            "advantage_cumulative": -65.3608609247,
+            "advantage_current": -42.6509654888,
+            "n_predicted": 64,
+            "coverage": 0.571428571429,
             "length_bytes": 31111,
             "calibration": {
               "pit": [
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0
+                0.2997216596,
+                0.0497216596,
+                0.0497216596,
+                0.0497216596,
+                0.0497216596,
+                0.0497216596,
+                0.0497216596,
+                0.0395308598197,
+                0.0171978096274,
+                0.345219713353
               ],
-              "coverage_50": null,
-              "coverage_90": null,
-              "n": 0
+              "coverage_50": 0.248573290085,
+              "coverage_90": 0.388518361661,
+              "n": 12
             },
             "flags": [
               "missing"
@@ -172,35 +108,126 @@
             "program": "sha256:896750b5d033691b93d263a345dad3313e37fdabd8fcd105913d5ac116cc18de",
             "name": "seir-x1-s1",
             "lineage": "anthropic/claude",
-            "w_cumulative": 0.166666666667,
-            "w_current": 0.166666666667,
-            "advantage_cumulative": 0.0,
-            "advantage_current": 0.0,
-            "n_predicted": 16,
-            "coverage": 1.0,
+            "w_cumulative": 5.38835472635e-7,
+            "w_current": 0.000100994804696,
+            "advantage_cumulative": -65.3608609247,
+            "advantage_current": -42.6509654888,
+            "n_predicted": 64,
+            "coverage": 0.571428571429,
             "length_bytes": 31053,
             "calibration": {
               "pit": [
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0
+                0.2997216596,
+                0.0497216596,
+                0.0497216596,
+                0.0497216596,
+                0.0497216596,
+                0.0497216596,
+                0.0497216596,
+                0.0395308598197,
+                0.0171978096274,
+                0.345219713353
               ],
-              "coverage_50": null,
-              "coverage_90": null,
-              "n": 0
+              "coverage_50": 0.248573290085,
+              "coverage_90": 0.388518361661,
+              "n": 12
+            },
+            "flags": [
+              "missing"
+            ]
+          },
+          {
+            "program": "sha256:de077e4f1f8d8067ee49dd6ca577ed6ac030bef5e7e14eb4ea6634744fff979f",
+            "name": "seir-x0-s0",
+            "lineage": "anthropic/claude",
+            "w_cumulative": 2.04220955489e-8,
+            "w_current": 9.99959183841e-6,
+            "advantage_cumulative": -78.4520323202,
+            "advantage_current": -51.9010646923,
+            "n_predicted": 80,
+            "coverage": 0.714285714286,
+            "length_bytes": 31335,
+            "calibration": {
+              "pit": [
+                0.194966137338,
+                0.044966137338,
+                0.044966137338,
+                0.044966137338,
+                0.044966137338,
+                0.044966137338,
+                0.044966137338,
+                0.044966137338,
+                0.0302627824395,
+                0.460008118857
+              ],
+              "coverage_50": 0.22483068669,
+              "coverage_90": 0.374581070744,
+              "n": 20
+            },
+            "flags": [
+              "missing"
+            ]
+          },
+          {
+            "program": "sha256:c5bf0e5a3b2f595c8a9ec8e979dcda0010f1ecb88f7b9e42927cceca7ca0326e",
+            "name": "seir-x0-s1",
+            "lineage": "anthropic/claude",
+            "w_cumulative": 2.04220955489e-8,
+            "w_current": 9.99959183841e-6,
+            "advantage_cumulative": -78.4520323202,
+            "advantage_current": -51.9010646923,
+            "n_predicted": 80,
+            "coverage": 0.714285714286,
+            "length_bytes": 31279,
+            "calibration": {
+              "pit": [
+                0.194966137338,
+                0.044966137338,
+                0.044966137338,
+                0.044966137338,
+                0.044966137338,
+                0.044966137338,
+                0.044966137338,
+                0.044966137338,
+                0.0302627824395,
+                0.460008118857
+              ],
+              "coverage_50": 0.22483068669,
+              "coverage_90": 0.374581070744,
+              "n": 20
             },
             "flags": [
               "missing"
             ]
           }
         ],
+        "regime_tv": 0.0356590990688,
+        "regime_flag": false,
+        "mixture_calibration": {
+          "pit": [
+            0.0411712029938,
+            0.166171202994,
+            0.0411712029938,
+            0.0411712029938,
+            0.0411712029938,
+            0.0411712029938,
+            0.0411712029938,
+            0.0411712029938,
+            0.0325214643266,
+            0.513108911723
+          ],
+          "coverage_50": 0.205856014969,
+          "coverage_90": 0.641502698335,
+          "n": 24
+        },
+        "mixture_log_score": -108.75154993,
+        "n_resolved": 24,
+        "n_pending": 88,
+        "n_withdrawn": 0
+      },
+      {
+        "stream": "w-alpha/ed-visits",
+        "programs": [],
         "regime_tv": 0.0,
         "regime_flag": false,
         "mixture_calibration": {
@@ -222,7 +249,7 @@
         },
         "mixture_log_score": 0.0,
         "n_resolved": 0,
-        "n_pending": 16,
+        "n_pending": 0,
         "n_withdrawn": 0
       }
     ],
@@ -230,76 +257,25 @@
       {
         "claim": "covariate-x",
         "statement": "The covariate x lowers transmission, so conditioning on it improves forecasts.",
-        "pairs": [
-          {
-            "claim": "covariate-x",
-            "asserts": "sha256:896750b5d033691b93d263a345dad3313e37fdabd8fcd105913d5ac116cc18de",
-            "denies": "sha256:c5bf0e5a3b2f595c8a9ec8e979dcda0010f1ecb88f7b9e42927cceca7ca0326e",
-            "delta_nats": 0.0,
-            "n_targets": 0,
-            "verdict": "insufficient evidence"
-          },
-          {
-            "claim": "covariate-x",
-            "asserts": "sha256:c50a99e377fec8913a89861562df2cfa655d36eac1e64b2e8825198b2382435a",
-            "denies": "sha256:de077e4f1f8d8067ee49dd6ca577ed6ac030bef5e7e14eb4ea6634744fff979f",
-            "delta_nats": 0.0,
-            "n_targets": 0,
-            "verdict": "insufficient evidence"
-          }
-        ],
+        "pairs": [],
         "verdict": "insufficient evidence"
       },
       {
         "claim": "covariate-x-flat",
         "statement": "The covariate x improves forecasts where it is identically zero (a negative control).",
-        "pairs": [
-          {
-            "claim": "covariate-x-flat",
-            "asserts": "sha256:896750b5d033691b93d263a345dad3313e37fdabd8fcd105913d5ac116cc18de",
-            "denies": "sha256:c5bf0e5a3b2f595c8a9ec8e979dcda0010f1ecb88f7b9e42927cceca7ca0326e",
-            "delta_nats": 0.0,
-            "n_targets": 0,
-            "verdict": "insufficient evidence"
-          },
-          {
-            "claim": "covariate-x-flat",
-            "asserts": "sha256:c50a99e377fec8913a89861562df2cfa655d36eac1e64b2e8825198b2382435a",
-            "denies": "sha256:de077e4f1f8d8067ee49dd6ca577ed6ac030bef5e7e14eb4ea6634744fff979f",
-            "delta_nats": 0.0,
-            "n_targets": 0,
-            "verdict": "insufficient evidence"
-          }
-        ],
+        "pairs": [],
         "verdict": "insufficient evidence"
       },
       {
         "claim": "school",
         "statement": "School term raises transmission, so closing schools lowers the counts.",
-        "pairs": [
-          {
-            "claim": "school",
-            "asserts": "sha256:896750b5d033691b93d263a345dad3313e37fdabd8fcd105913d5ac116cc18de",
-            "denies": "sha256:c50a99e377fec8913a89861562df2cfa655d36eac1e64b2e8825198b2382435a",
-            "delta_nats": 0.0,
-            "n_targets": 0,
-            "verdict": "insufficient evidence"
-          },
-          {
-            "claim": "school",
-            "asserts": "sha256:c5bf0e5a3b2f595c8a9ec8e979dcda0010f1ecb88f7b9e42927cceca7ca0326e",
-            "denies": "sha256:de077e4f1f8d8067ee49dd6ca577ed6ac030bef5e7e14eb4ea6634744fff979f",
-            "delta_nats": 0.0,
-            "n_targets": 0,
-            "verdict": "insufficient evidence"
-          }
-        ],
+        "pairs": [],
         "verdict": "insufficient evidence"
       }
     ],
     "ranking": null,
     "indicators": {
-      "interface_weight_share": 0.666666666667,
+      "interface_weight_share": 0.0,
       "readback_clean_share": 0.0,
       "lineage_entropy": 0.0
     },
