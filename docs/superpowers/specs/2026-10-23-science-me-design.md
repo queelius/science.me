@@ -1,14 +1,14 @@
 # science.me (design document)
 
-**Version:** 0.1.1 (2026-10-23)
+**Version:** 0.2 (2026-10-23)
 **Status:** brainstorm output, pre-plan. The social layer (section 9) is deliberately open.
-
-**Pending decisions (Alex), from the builder check:**
-
-1. Where the pilot's contributions come from: Alex's own agent sessions driven by hand (as on Prove2Me), an orchestration loop the pilot builds, or both. This sets whether a second system gets built and how the success criteria are sized.
-2. Who captains the NHANES standing mission and which sub-literature it covers. The claims, observables, measurement models, and the second survey (whose access terms differ) all follow from this.
-3. The pilot's time horizon and budget, given that criterion 2(b) waits on a real data release.
 **Authors:** Alexander Richard Towell (decisions), Claude (drafting; calls marked as such)
+
+**Decisions from the builder check (Alex, 2026-10-23):**
+
+1. Contributions come from Alex's existing agent loops, as on Prove2Me, through the harness. The pilot builds no orchestrator of its own.
+2. The pilot's captain may be an LLM, with the safeguards in 6.4.
+3. A year's wait for the first real resolution is unacceptable. The real stream is respiratory disease surveillance, which resolves weekly, and private synthetic worlds give feedback on demand (section 8). NHANES is deferred.
 
 Labels used throughout:
 
@@ -41,7 +41,7 @@ It **is**:
 - a dependency graph of claims, theories, evidence, environments and commitments, with a standing (weight) on every node that is always provisional and always has a history;
 - a scoring rule that converts committed predictions into standing, mechanically;
 - a harness that lets any agent contribute an atomic unit of work (a *test*, section 5) without coordinating with anyone;
-- a set of *missions*, each with a human captain, that bound what humans must audit.
+- a set of *missions*, each with a captain (human in the long run; an LLM captain is allowed in the pilot, section 6.4), that bound what must be audited.
 
 It is **not**:
 
@@ -134,6 +134,16 @@ A passed test counts in proportion to how probably it would have failed had the 
 
 Normal science tolerates anomalies. A graph that retracts everything on one contradiction oscillates on every noisy result. Standings are graded and damped, never toggled.
 
+### 3.10 Interventions are program surgery (Call)
+
+If a theory is written as a **structural** program (each variable assigned from its parents and its own exogenous noise, in topological order), then `do(X = x)` is a mechanical transformation: replace the assignment of X with `X = x` and leave every other line unchanged (Pearl's surgery semantics). The intervened program is derived, not authored, and correct by construction relative to the theory's declared structure. The theory's causal content *is* its assignment structure, visible in the code. Two observationally equivalent theories that differ in one line's parents differ in their interventional predictions, and that difference is testable wherever interventional data exists: synthetic worlds, natural experiments, policy changes.
+
+Theories that are not structural cannot be intervened on mechanically. An intervention variant that someone writes for such a theory adds causal content the original lacked and is therefore a **new theory** with an `extends` edge (5.10), scored like any other. Read-back review of such a variant is a provisional check; the real check is interventional data.
+
+Surgery applies to the composed program `lens ∘ theory` (5.1). An intervention may act on the lens (a change in testing practice) rather than on the mechanism, and the replaced line must be the right one.
+
+Identification (the do-calculus proper) yields a task rather than a verdict: given a theory's structure, which interventional quantities are computable from observational data, and which natural experiments would identify the rest (5.6).
+
 ---
 
 ## 4. The epistemic calculus
@@ -200,9 +210,10 @@ All objects are immutable and content-addressed. "Updating" creates a new object
 A dataset together with the conditions under which it was generated.
 
 - data (by content hash; the bytes themselves may be held elsewhere, including by a custodian, section 6.2)
-- a **measurement model**: how observations were produced, selection process, instruments. This is a hypothesis node, contestable.
+- a **measurement model**, also called a **lens**: a program mapping what a theory predicts (incidence, say) to what is recorded (reported admissions after delays, under-ascertainment, revisions): `observation = lens(theory output)`. It is its own node: contestable, reusable across theories, credited by reuse like a definition (5.7). Its program length counts in the total codelength of any theory composed with it, so a long single-use lens that rescues one theory on one dataset is charged in full (Lakatos's protective belt, priced in bits), while a short lens that many theories share and that can be checked against its own calibration data is progressive.
 - declared conditions: population, time, regime, what differs from sibling environments
 - provenance: collector, collection dates, release schedule (for streams)
+- for streams, **vintages**: the data as of each release date. Streams get revised (backfill), so an environment for a stream is the pair (target period, vintage), and a commitment names the vintage it resolves against (5.5).
 - access class: public / time-locked / custodian-held / synthetic-private
 
 Datasets become environments because invariance is detectable only across variation. Five environments of one phenomenon under different conditions are worth more than one five times the size.
@@ -229,6 +240,8 @@ A program.
 
 A theory is a claim with executable predictive content. The hierarchy hypothesis → model → theory → programme is represented by domain breadth and import structure, not by separate types. (Call)
 
+**Interventional content**, three classes, recorded on the theory (Call): **structural**, where `do()` is derived by surgery (3.10), preferred and marked as such; **declared**, where an intervention variant has been submitted as a new theory with an `extends` edge; **none**, a joint sampler or black box, rung one only and labeled so.
+
 ### 5.4 Evidence item
 
 A reproducible computation relating a theory or claim to an environment.
@@ -244,7 +257,7 @@ Anyone can re-run it. Its reproducibility is mechanical; its *relevance* (does i
 
 A hash of a prediction (or analysis plan) plus a timestamp in an append-only log, revealed later.
 
-- hash, timestamp, committer, the environment or stream it concerns, expected resolution date
+- hash, timestamp, committer, the environment or stream it concerns, expected resolution date, and for streams the resolution vintage (the as-of date of the data it will be scored against)
 - reveal: the pre-image, checked against the hash
 - resolution: the evidence item that scores it
 
@@ -259,6 +272,8 @@ Commitments are the kernel. Provenance facts checkable from them: committed befo
 - extend a claim to an environment it was not built on
 - find an environment where two standing theories disagree and locate data there
 - find a natural experiment relevant to a claim
+- run an identification analysis on a structural theory: which of its interventional claims are computable from observational data, and what would identify the rest (3.10)
+- write or calibrate a lens (5.1) against instrument or reporting data
 - commit a prediction for a scheduled release
 - audit a pipeline; write a read-back
 - propose a definition that shortens existing theories
@@ -284,7 +299,7 @@ The audit surface is the mission core: claims, falsification criteria, the envir
 
 ### 5.10 Edges
 
-depends-on, imports, tests, supports (with e-value), contradicts (with nogood), supersedes, predictively-equivalent-to, committed-for. The graph is a DAG except for `contradicts`, which is symmetric.
+depends-on, imports, extends (a theory adding interventional content to another, 3.10), tests, supports (with e-value), contradicts (with nogood), supersedes, predictively-equivalent-to, committed-for. The graph is a DAG except for `contradicts`, which is symmetric.
 
 ---
 
@@ -319,7 +334,9 @@ The discount factors are left to the builder.
 
 ### 6.4 Read-back (carried over from Prove2Me)
 
-For each evidence item and each claim in a mission core, an independent agent that has not seen the source states, in plain language, what the analysis literally tests or what the claim literally asserts, with every assumption explicit. The human auditor compares that testimony to the source. Faithfulness is judged on the comparison, not by reading code.
+For each evidence item and each claim in a mission core, an independent agent that has not seen the source states, in plain language, what the analysis literally tests or what the claim literally asserts, with every assumption explicit. The auditor compares that testimony to the source. Faithfulness is judged on the comparison, not by reading code.
+
+**LLM captains (Decided for the pilot; safeguards Call).** A captain may be an agent. Safeguards: the read-back is produced by a different model lineage from the one that drafted the claim (Alex already alternates Claude and Codex; this is also the design's first anti-monoculture mechanism); the human spot-checks a sample of audited claims rather than all of them; and every audited claim records which agent audited it, so trust can be discounted retroactively. Prove2Me forbids delegating the audit because a bad statement contaminates everything above it; in the pilot a mis-audited claim is a ledger entry, not a published proof, so the cost is bounded.
 
 ### 6.5 Synthetic worlds (Decided (Alex proposed), details Call)
 
@@ -340,7 +357,7 @@ The platform is a theory about which theories are true, and it is scored prequen
 | Forking paths / garden of forking paths | many analyses, report the one that worked | commitment before data (5.5); multiverse as a task type (5.6); reusable holdout budget (6.2) |
 | Training-data contamination | agents recall rather than discover | post-cutoff and custodian data only at full weight (6.3) |
 | Evidence exhaustion | finite information in fixed data | organize around streams and OOD commitments, not re-analysis (3.7, 5.1) |
-| Correlated error / monoculture | many copies of one model | diversity of models, methods and environments is a measured goal; **mechanism Open** (section 9) |
+| Correlated error / monoculture | many copies of one model | read-back by a different model lineage than the drafter (6.4); diversity of models, methods and environments is a measured goal; **further mechanism Open** (section 9) |
 | Information cascades | agents read each other and converge | independent assessment before exposure to consensus; **mechanism Open** |
 | Manufactured doubt | flawed falsifications are cheap | submission costs compute or reputation; **mechanism Open** |
 | Goodhart | any metric gamed | credit is compression gain on committed data (4.8), which rewards only what nothing else predicted; no volume metrics; **further mechanism Open** |
@@ -354,45 +371,58 @@ The platform is a theory about which theories are true, and it is scored prequen
 
 ## 8. Pilot
 
-### 8.1 Domain (Call, Alex leaning toward "marginally useful and in the spirit")
+### 8.1 Domain (Decided: respiratory surveillance, with synthetic worlds first for immediate feedback)
 
-**Nutrition and health epidemiology on national health surveys, starting with NHANES**, with **synthetic experimentable worlds** run in parallel as the machinery's test bed.
+Two tiers, run concurrently.
 
-Why NHANES: thousands of published associations; a literature known to be fragile with a direct methodological precedent (Patel, Burford, Ioannidis 2015, vibration of effects); a two-year release cycle, so commitments resolve on post-cutoff data; comparable surveys in other countries (KNHANES, CHNS, ELSA, SHARE) providing genuine environments for invariance tests; public data with computational evidence; a mission shape that copies over from Prove2Me ("Mission: dietary sodium and blood pressure", milestones = key published claims).
+**Tier 1, feedback on demand: private synthetic epidemic worlds.** Generators with known ground truth in the same domain as tier 2: a stochastic multi-jurisdiction SEIR-type model with seasonal forcing and jurisdiction-specific parameters, observed through a reporting lens (delay, backfill, under-ascertainment, age-specific hospitalization), with a `do()` interface on contact rate, school status and vaccination coverage. Plus at least one adversarial generator not written as a compartmental model (an agent-based network model), so the true program is not short in the reference language by construction. Resolution is immediate. This is where the machinery is built and debugged, where the full loop (hypothesize, intervene, update) runs end to end, and where a lens swap (a new observation channel on the same generator) tests whether the platform absorbs it in a lens rather than in a theory rewrite.
 
-Known risks of the choice: not glamorous; "replication police" breeds hostility; most claims are associational. Mitigations: credit what survives rather than what fails; let cross-national invariance supply the scientific content; run frontier missions from day one.
+**Tier 2, the real stream: US respiratory disease surveillance.** Weekly hospital admissions for influenza, COVID-19 and RSV from NHSN, and outpatient ILINet, the data behind the CDC FluSight, COVID-19 and RSV forecast hubs. Why:
 
-Alternatives considered and set aside for the pilot: forecast hubs (closest existing pattern, but forecasting is not theory-building), Rubin/LSST alerts (needs astronomy captains), replication prediction à la SCORE (slow resolution), Alex's masked-data reliability domain (full competence to captain, niche audience).
+- Resolution is weekly. The 2026–27 season is starting, so every week of data is post-cutoff for every model, and commitments earn full weight (6.3) by construction.
+- Hub infrastructure exists to borrow and interoperate with: target definitions, data formats, proper scoring (WIS), and a published ensemble that is the mixture result (4.1) in the wild.
+- It is theory-rich, not just forecasting. Mechanistic transmission models compete with phenomenological ones; the standing mission can formalize published claims about transmission; jurisdictions are environments, so "do transmission parameters transfer across states" is an invariance question with real content.
+- Backfill makes lenses (5.1) necessary from the first week, which exercises the measurement-model machinery on real data.
+- A natural experiment is on record: the near-absent 2020–21 influenza season under COVID-19 interventions.
+
+Standing-mission claims, as examples for the captain rather than decisions: absolute humidity and transmission (Shaman and Kohn 2009); school holidays and transmission (Cauchemez et al. 2008); vaccination coverage and hospitalization; the post-pandemic shift in RSV seasonality; the effect of 2020–21 interventions on influenza.
+
+Frontier mission: weekly committed predictive distributions per jurisdiction from theories written as structural programs composed with lenses. The deliverable is a theory that takes weight from the baseline mixture, and an invariance result: fitted on some jurisdictions, committed and scored on others.
+
+Known risks: a crowded field (the hubs host dozens of teams), so the pilot's contribution is the ledger, the standings and the invariance results, not beating the ensemble; a season is only about thirty weeks; revisions complicate scoring (vintages, 5.1); jurisdictions are correlated through shared drivers (handled in 8.2).
+
+Alternatives considered and set aside: NHANES (deferred: a two-year release cycle, and the latest release is already in current models' training data, so no clean resolution inside a year); CSEP earthquake forecasting (the strongest existing precedent for prospective committed testing, since 2007, but events are irregular); Rubin/LSST alerts (needs astronomy captains); Alex's masked-data reliability domain (full competence to captain, niche audience).
 
 ### 8.2 Scope
 
-- 50–100 published claims from one sub-literature, chosen by the captain.
-- Object types: environment, claim, theory, evidence item, commitment. Definitions and nogoods as needed.
-- One scoring rule (4.2) and one standing-weight rule (4.3).
-- Two missions: one standing, one frontier.
-- At least two real environments (NHANES plus one other national survey) and one scheduled resolution (the next NHANES cycle).
-- At least three synthetic worlds with private generators, one of them adversarial.
+- Tier 1: at least three synthetic worlds with private generators (two compartmental with different lenses, one adversarial agent-based), each with a `do()` interface, each the subject of an ordinary mission.
+- Tier 2: environments are (jurisdiction, season, vintage) for at least ten jurisdictions plus national; two missions, one standing (20–50 published claims about transmission, formalized as test specifications, 5.9) and one frontier (weekly commitments).
+- Object types: environment, claim, theory, evidence item, commitment. Lenses and definitions as needed; nogoods as needed.
+- Scoring: log-score for standing (4.2); hub-format quantile export and WIS for comparability with hub teams.
+- Contributions come from Alex's agent loops through the harness; no orchestrator is built (Decided). The captain is an LLM with the 6.4 safeguards (Decided).
+- **Independence axis (Call).** E-values multiply across *weeks*, by sequential conditioning: one e-value per week, computed conditional on all prior data, across all jurisdictions jointly, which is a test supermartingale regardless of cross-jurisdiction correlation. Jurisdictions are *not* multiplied across; they are the out-of-distribution axis: a theory fitted on some is committed on the others and scored by log-score difference against the baseline mixture.
 
 Builder-check resolutions (all Call):
 
-- **The platform executes evidence items itself**, in a sandbox, as Prove2Me verifies server-side. An evidence item exists, and can carry standing, only once the platform has reproduced it; contributor-side results are submissions, not evidence. NHANES is public-domain and redistributable, which makes this possible for the pilot.
+- **The platform executes evidence items itself**, in a sandbox, as Prove2Me verifies server-side. An evidence item exists, and can carry standing, only once the platform has reproduced it; contributor-side results are submissions, not evidence. NHSN and ILINet data are public, which makes this possible for the pilot.
 - **Log-score only.** Pilot theories must expose a density (the PPL subset of the reference language). This keeps the e-value-as-likelihood-ratio identity (4.4) exact. Sampler-only theories, and the energy score or CRPS they need, are post-pilot.
 - **Synthetic worlds are environments in the same ledger**, access class synthetic-private, and their missions are ordinary missions. Generators are written and held by someone other than the sessions that propose theories against them, outside any workspace a proposer can read; proposers see only observations and the `do()` interface. Model lineage is not a contamination channel (a model cannot recall a program it wrote in another session), but shared context is.
 - **No Thresholdout accounting in the pilot.** Synthetic-world queries are counted, not budgeted. Real custodian-held and time-locked holdouts are out of scope (8.4).
 
 ### 8.3 Success criteria (falsifiable)
 
-1. Standings move: for the audited claims, the standing after reproduce/vary/extend differs materially from "published = supported" for a nontrivial fraction, with provenance.
-2. (a) The commitment mechanism is validated end to end on synthetic worlds, where resolution is on demand; (b) at least one committed prediction resolves at full weight (6.3) on a real release, and the platform's calibration (6.6) is reported. (b) is on the release schedule of the data source and may be the pilot's longest pole.
-3. On synthetic worlds, the mixture concentrates on the true generator (or its predictive equivalent) within a budget the builder sets, and injected fake evidence is detected.
-4. At least one person who is not Alex contributes a test.
-5. Someone in the field says the standing report told them something they did not know.
+1. Tier 1: the mixture concentrates on the true generator (or its predictive equivalent) within a budget the builder sets; `do()` predictions derived by surgery from structural theories match the generator's interventions; injected fake evidence is detected; a lens swap is absorbed by a new lens, not a theory rewrite.
+2. Tier 2: (a) at least eight consecutive weekly commitments resolve at full weight and the platform's calibration (6.6) is reported; (b) standings for the audited claims move materially from "published = supported" for a nontrivial fraction, with provenance; (c) at least one invariance result: a theory fitted on a subset of jurisdictions, committed and scored on the rest.
+3. At least one person who is not Alex contributes a test.
+4. Someone in the field says the standing report told them something they did not know.
 
-If 1–3 fail, the mechanism is wrong and no platform is built. If 4–5 fail, the mechanism may be right and the social layer is wrong.
+If 1–2 fail, the mechanism is wrong and no platform is built. If 3–4 fail, the mechanism may be right and the social layer is wrong.
+
+Time horizon (Decided: a year is too long). Tier 1 produces results in days. Tier 2 produces its first full-weight resolution one week after the first commitment and satisfies 2(a) about two months after it.
 
 ### 8.4 Explicitly out of scope for the pilot
 
-Real-money stakes; a public reputation system; moderation; multiple captains; any domain beyond the two above; a UI beyond what agents and the captain need; real custodian-held or time-locked holdouts and Thresholdout budgeting; sampler-only theories; an orchestration loop that runs proposer agents automatically (see pending decisions, top of document).
+Real-money stakes; a public reputation system; moderation; multiple captains; any domain beyond the two tiers above; a UI beyond what agents and the captain need; real custodian-held or time-locked holdouts and Thresholdout budgeting; sampler-only theories; an orchestration loop that runs proposer agents automatically; beating the hub ensemble, which is not a goal; NHANES and the nutrition literature, which are deferred to a later standing mission.
 
 ---
 
@@ -432,6 +462,9 @@ Technical choices this document does not make. Where Claude has a lean, it is no
 6. **Synthetic world generators.** Format, interface for `do()` queries, rotation schedule.
 7. **Environment metadata schema.** What "conditions" and "measurement model" contain, structurally, so that cross-environment comparison is mechanical.
 8. **Agent harness.** A SKILL.md-style entry point with references, mirroring Prove2Me's workspace repo, so onboarding is "point your agent at one URL."
+9. **Hub interoperability.** Weekly ingestion of NHSN and ILINet vintages; export of committed predictive distributions in hub quantile format with WIS computed alongside the log-score, so pilot theories are comparable with hub teams without being submitted to the hubs.
+10. **Synthetic epidemic generators.** The compartmental and agent-based generators of 8.1, their reporting lenses, and the `do()` interface; stored and run where no proposing session can read them.
+11. **Surgery implementation.** The structural-program subset of the reference language on which `do()` is defined mechanically, and the check that a submitted theory is in that subset.
 
 ---
 
@@ -460,9 +493,18 @@ Epistemology and statistics
 - Baron, Mellers, Tetlock, Ungar. *Two reasons to make aggregated probability forecasts more extreme.* (2014). Hinton, products of experts (2002).
 - Cramer et al. COVID-19 Forecast Hub ensemble evaluation. PNAS (2022).
 
+Pilot domain
+
+- Mathis et al. *Evaluation of FluSight influenza forecasting in the 2021–22 and 2022–23 seasons.* Nature Communications (2024).
+- Bracher, Ray, Gneiting, Reich. *Evaluating epidemic forecasts in an interval format.* PLoS Comput Biol (2021): the weighted interval score.
+- Shaman, Kohn. *Absolute humidity modulates influenza survival, transmission, and seasonality.* PNAS (2009).
+- Cauchemez et al. *Estimating the impact of school closure on influenza transmission from Sentinel data.* Nature (2008).
+- Schorlemmer et al. *The Collaboratory for the Study of Earthquake Predictability: achievements and priorities.* Seismol Res Lett (2018): prospective committed testing of forecast models.
+
 ---
 
 ## 12. Changelog
 
 - **0.1** (2026-10-23): initial draft from the brainstorm.
 - **0.1.1** (2026-10-23): builder check applied. Added: structural independence rule for e-values (4.4); claims as test specifications in standing missions (5.9); three contamination weight classes (6.3); pilot execution model, log-score-only rule, synthetic-world boundary, and holdout scope (8.2); criterion 2 split (8.3); pending decisions for Alex (top).
+- **0.2** (2026-10-23): Alex's decisions applied. Pilot re-centred on respiratory disease surveillance (weekly resolution) with synthetic epidemic worlds for feedback on demand; NHANES deferred (8). Contributions from Alex's agent loops, no orchestrator; LLM captain with safeguards (6.4). Added: interventions as program surgery and three classes of interventional content (3.10, 5.3); lenses as measurement-model programs with MDL accounting, and vintages for streams (5.1, 5.5); identification and lens tasks (5.6); `extends` edge (5.10); independence across weeks by sequential conditioning, jurisdictions as the OOD axis (8.2); hub interoperability, generators and surgery for the builder (10).
