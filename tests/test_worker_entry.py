@@ -310,11 +310,92 @@ def test_target_of_a_covariate_stream_has_no_support(ws, tmp_path):
     assert result.kind == "failure" and "support" in result.error
 
 
-def test_exit_requests_are_not_swallowed(ws, tmp_path, view):
-    code = "def predict(ctx, target):\n    raise SystemExit(3)\n"
+# A program that misbehaves for jurisdiction A (`offense` is the body of the `if`), and forecasts 2 otherwise.
+def offender(offense: str, prelude: str = "") -> str:
+    return (
+        "from scienceme.sdk import Pmf\n"
+        f"{prelude}"
+        "def predict(ctx, target):\n"
+        f"    if target.jurisdiction == 'A':\n        {offense}\n"
+        "    return Pmf.point(2)\n"
+    )
+
+
+def assert_only_a_failed(results, error_start):
+    a, b, c = results
+    assert a.kind == "failure" and a.error.startswith(error_start), a
+    assert (b.kind, b.pmf, c.kind, c.pmf) == ("prediction", Pmf.point(2), "prediction", Pmf.point(2))
+
+
+ABC = [tgt("A"), tgt("B"), tgt("C")]
+
+
+def test_an_exception_whose_str_raises_still_fails_only_its_target(ws, tmp_path, view):
+    prelude = "class Bad(Exception):\n    def __str__(self):\n        raise RuntimeError('no str')\n"
+    write_program(ws, "p", offender("raise Bad()", prelude))
+    assert_only_a_failed(run(ws, tmp_path, view, "p", ABC), "Bad")
+
+
+def test_a_pmf_subclass_whose_model_dump_raises_fails_only_its_target(ws, tmp_path, view):
+    prelude = "class Evil(Pmf):\n    def model_dump(self, **kw):\n        raise RuntimeError('no dump')\n"
+    write_program(ws, "p", offender("return Evil.point(1)", prelude))
+    results = run(ws, tmp_path, view, "p", ABC)
+    assert_only_a_failed(results, "invalid Pmf")
+    assert "RuntimeError: no dump" in results[0].error
+
+
+def test_a_return_value_that_raises_when_inspected_fails_only_its_target(ws, tmp_path, view):
+    prelude = (
+        "class Hostile:\n    @property\n    def __class__(self):\n        raise RuntimeError('no class')\n"
+    )
+    write_program(ws, "p", offender("return Hostile()", prelude))
+    results = run(ws, tmp_path, view, "p", ABC)
+    assert_only_a_failed(results, "RuntimeError")
+    assert "no class" in results[0].error
+
+
+@pytest.mark.parametrize("call", ["raise SystemExit(3)", "import sys; sys.exit('bye')", "import sys; sys.exit(0)"])
+def test_sys_exit_in_predict_fails_only_its_target(ws, tmp_path, view, call):
+    write_program(ws, "p", offender(call))
+    assert_only_a_failed(run(ws, tmp_path, view, "p", ABC), "SystemExit")
+
+
+@pytest.mark.parametrize("exception", ["KeyboardInterrupt", "GeneratorExit"])
+def test_interrupts_are_not_swallowed(ws, tmp_path, view, exception):
+    write_program(ws, "p", offender(f"raise {exception}"))
+    with pytest.raises(BaseException) as raised:
+        run(ws, tmp_path, view, "p", ABC)
+    assert type(raised.value).__name__ == exception
+
+
+@pytest.mark.parametrize(
+    "module_code,needle",
+    [
+        ("import sys\nsys.exit(0)\n", "SystemExit"),
+        ("class Bad(Exception):\n    def __str__(self):\n        raise RuntimeError('no str')\nraise Bad()\n", "Bad"),
+    ],
+)
+def test_module_level_exit_or_unprintable_error_is_a_load_failure(ws, tmp_path, view, module_code, needle):
+    write_program(ws, "p", module_code)
+    results = run(ws, tmp_path, view, "p", ABC)
+    assert len(results) == 3
+    assert all(r.kind == "failure" and r.error.startswith("load:") and needle in r.error for r in results)
+
+
+def test_a_program_cannot_move_the_support_bound_of_later_targets(ws, tmp_path, view):
+    code = (
+        "from scienceme.sdk import Pmf\n"
+        "def predict(ctx, target):\n"
+        "    if target.horizon == 0:\n"
+        "        spec = ctx.view.specs['w/adm']\n"
+        "        ctx.view.specs['w/adm'] = spec.model_copy(update={'support_max': 10**6})\n"
+        "        return Pmf.point(1)\n"
+        "    return Pmf.point(5000)\n"
+    )
     write_program(ws, "p", code)
-    with pytest.raises(SystemExit):
-        run(ws, tmp_path, view, "p", [tgt()])
+    first, second = run(ws, tmp_path, view, "p", [tgt("A", 0), tgt("A", 1)])
+    assert first.kind == "prediction"
+    assert second.kind == "failure" and "support [0, 1000]" in second.error
 
 
 def test_imports_of_requires_registration_and_is_read_only():

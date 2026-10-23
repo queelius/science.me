@@ -8,6 +8,10 @@ that goes wrong (the program raises, returns something that is not a valid
 target alone; a program that cannot be loaded fails every target with an
 error starting `load:`.  Loaded modules stay in `sys.modules` for the life of
 the process, since the sandbox runs one `execute` per process.
+
+Program code is untrusted, so what it can raise is contained: `Exception` and
+`SystemExit` (a program calling `sys.exit`) become Failures; `KeyboardInterrupt`
+and `GeneratorExit` are not the program's to answer for and propagate.
 """
 
 from __future__ import annotations
@@ -39,6 +43,8 @@ _HASH_PREFIX = "sha256:"
 _MODULE_PREFIX = "scienceme_program_"
 _MODULE_HEX = 16
 _ENCODING = "utf-8"
+# What program code may raise without taking the runner down.
+_CONTAINED = (Exception, SystemExit)
 
 
 class WorkOrder(Frozen):
@@ -80,6 +86,10 @@ class LoadError(Exception):
     """A program or one of its imports cannot be loaded."""
 
 
+class _Rejected(Exception):
+    """What `predict` returned is unusable; the message is the target's error."""
+
+
 class _SourceLoader(importlib.machinery.SourceFileLoader):
     """Compiles the source every time.
 
@@ -89,6 +99,15 @@ class _SourceLoader(importlib.machinery.SourceFileLoader):
 
     def get_code(self, fullname: str) -> CodeType:
         return self.source_to_code(self.get_data(self.path), self.path)
+
+
+def _describe(error: BaseException) -> str:
+    """`Type: message`, or just `Type` when the program's own `__str__` raises."""
+    name = type(error).__name__
+    try:
+        return f"{name}: {error}"
+    except _CONTAINED:
+        return name
 
 
 def program_dirname(closure_hash: str) -> str:
@@ -160,40 +179,57 @@ class _Loader:
         sys.modules[name] = module
         try:
             loader.exec_module(module)
-        except Exception as e:
+        except _CONTAINED as e:
             sys.modules.pop(name, None)
-            raise LoadError(f"{manifest.name}: {type(e).__name__}: {e}") from e
+            raise LoadError(f"{manifest.name}: {_describe(e)}") from e
         return module
 
 
-def _forecast(predict: Callable[[Context, Target], Pmf], order: WorkOrder, target: Target) -> Prediction | Failure:
-    """Run `predict` on one target; anything wrong with the target or the return value is that target's Failure."""
-    try:
-        support_max = order.view.spec(target.stream).support_max
-        if support_max is None:
-            return Failure(target=target, error=f"stream {target.stream!r} has no support (it is not a count stream)")
-        result = predict(Context(view=order.view, seed=derive_seed(order.program, target)), target)
-    except Exception as e:
-        return Failure(target=target, error=f"{type(e).__name__}: {e}")
+def _support_bounds(view: ArchiveView, targets: Sequence[Target]) -> dict[str, int | None]:
+    """`support_max` of each target stream the view knows, read once so a program cannot move the bounds."""
+    return {t.stream: view.specs[t.stream].support_max for t in targets if t.stream in view.specs}
+
+
+def _checked(result: object, support_max: int) -> Pmf:
+    """`result` as a validated Pmf inside `[0, support_max]`; `_Rejected` says why when it is not."""
     if not isinstance(result, Pmf):
-        return Failure(target=target, error=f"predict returned {type(result).__name__}, expected Pmf")
-    try:  # a Pmf built around its validation (model_construct) must not get through
+        raise _Rejected(f"predict returned {type(result).__name__}, expected Pmf")
+    try:  # a Pmf built around its validation (model_construct), or a subclass that misbehaves, must not get through
         pmf = Pmf.model_validate(result.model_dump())
-    except ValueError as e:
-        return Failure(target=target, error=f"invalid Pmf: {e}")
+    except _CONTAINED as e:
+        raise _Rejected(f"invalid Pmf: {_describe(e)}") from e
     if not pmf.within(0, support_max):
-        return Failure(target=target, error=f"pmf outside support [0, {support_max}]")
-    return Prediction(target=target, pmf=pmf)
+        raise _Rejected(f"pmf outside support [0, {support_max}]")
+    return pmf
+
+
+def _forecast(
+    predict: Callable[[Context, Target], Pmf], order: WorkOrder, bounds: dict[str, int | None], target: Target
+) -> Prediction | Failure:
+    """Run `predict` on one target; anything wrong with the target or the return value is that target's Failure."""
+    if target.stream not in bounds:
+        return Failure(target=target, error=f"unknown stream {target.stream!r}")
+    support_max = bounds[target.stream]
+    if support_max is None:
+        return Failure(target=target, error=f"stream {target.stream!r} has no support (it is not a count stream)")
+    try:
+        result = predict(Context(view=order.view, seed=derive_seed(order.program, target)), target)
+        return Prediction(target=target, pmf=_checked(result, support_max))
+    except _Rejected as e:
+        return Failure(target=target, error=str(e))
+    except _CONTAINED as e:
+        return Failure(target=target, error=_describe(e))
 
 
 def execute(order: WorkOrder, work: Path) -> WorkResult:
     """Run the order's program on every target; the programs live in `work/programs/<hex>/`."""
     try:
         predict = _Loader(order, work).predict_of(order.program)
-    except Exception as e:
-        error = f"load: {e}" if isinstance(e, LoadError) else f"load: {type(e).__name__}: {e}"
+    except _CONTAINED as e:
+        error = f"load: {e}" if isinstance(e, LoadError) else f"load: {_describe(e)}"
         return WorkResult(results=tuple(Failure(target=t, error=error) for t in order.targets))
-    return WorkResult(results=tuple(_forecast(predict, order, t) for t in order.targets))
+    bounds = _support_bounds(order.view, order.targets)
+    return WorkResult(results=tuple(_forecast(predict, order, bounds, t) for t in order.targets))
 
 
 def main(argv: Sequence[str] | None = None) -> int:
