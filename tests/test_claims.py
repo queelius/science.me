@@ -1,7 +1,16 @@
 import pytest
 from helpers import CONST, at, count_spec, make_mission, rt, write_program
 
-from scienceme.claims import ClaimStanding, PairStanding, Verdict, claim_standings, find_pairs, pair_standing, summarize
+from scienceme.claims import (
+    ClaimStanding,
+    PairStanding,
+    Verdict,
+    claim_standings,
+    find_pair_sets,
+    find_pairs,
+    pair_standing,
+    summarize,
+)
 from scienceme.manifest import PairDecl, Tag, closure_hash, load_manifest
 from scienceme.mission import Claim
 from scienceme.model import TargetFilter
@@ -311,3 +320,79 @@ def test_standings_round_trip_through_json(ws):
     ha, hd = _freeze_pair(ws)
     s = claim_standings(ws, _mission(SCHOOL), _resolution(ha, hd, [(0.0, -4.0), (0.0, -4.0)]), SPECS)[0]
     assert ClaimStanding.model_validate_json(s.model_dump_json()) == s
+
+
+# --- claim families: which pairs count for which claim (R11) ---
+
+CX, CXF, SCH = "covariate-x", "covariate-x-flat", "school"
+
+
+def _stances(cx: Tag, school: Tag) -> dict[str, Tag]:
+    return {CX: cx, CXF: cx, SCH: school}
+
+
+def _freeze_seir_family(ws) -> dict[str, str]:
+    """The seed library's four stances with its pairs, plus `conf`: x0s0's stances paired with x1s1 over all three
+    claims, a declaration that R9 accepts although the pair differs in two mechanisms.  Returns name -> hash."""
+    registry = Registry(ws)
+    h: dict[str, str] = {}
+
+    def freeze(name, cx, school, pairs=(), when=0):
+        decls = tuple(PairDecl(claim=c, partner=h[p]) for p, claims in pairs for c in claims)
+        write_program(ws, name, CONST + f"#{name}\n", tags=_stances(cx, school), pairs=decls)
+        h[name] = registry.freeze(name, at(when)).closure_hash
+
+    A, D = Tag.ASSERTS, Tag.DENIES
+    freeze("x1s1", A, A)
+    freeze("x1s0", A, D, [("x1s1", (SCH,))], 1)
+    freeze("x0s1", D, A, [("x1s1", (CX, CXF))], 2)
+    freeze("x0s0", D, D, [("x1s0", (CX, CXF)), ("x0s1", (SCH,))], 3)
+    freeze("conf", D, D, [("x1s1", (CX, CXF, SCH))], 4)
+    return h
+
+
+def _family_resolution(h: dict[str, str]) -> Resolution:
+    """Every program predicted every target: full coverage, and x1s1 scores best."""
+    resolved = tuple(rt(i + 1, i + 2, {p: (0.0 if n == "x1s1" else -4.0) for n, p in h.items()}) for i in range(2))
+    full = {p: 2 for p in h.values()}
+    return Resolution(resolved=resolved, pending=0, predicted=full, unscored={p: 0 for p in h.values()})
+
+
+def _pairs_by_claim(ws, mission, h) -> dict[str, set[tuple[str, str]]]:
+    names = {p: n for n, p in h.items()}
+    standings = claim_standings(ws, mission, _family_resolution(h), SPECS)
+    return {s.claim: {(names[p.asserts], names[p.denies]) for p in s.pairs} for s in standings}
+
+
+def test_find_pair_sets_carries_each_pairs_declared_claims(ws):
+    h = _freeze_seir_family(ws)
+    names = {p: n for n, p in h.items()}
+    found = {(names[a], names[d]): claims for a, d, claims in find_pair_sets(ws, SCH)}
+    assert found == {
+        ("x1s1", "x1s0"): frozenset({SCH}),
+        ("x0s1", "x0s0"): frozenset({SCH}),
+        ("x1s1", "conf"): frozenset({CX, CXF, SCH}),
+    }
+    assert find_pairs(ws, SCH) == sorted((a, d) for a, d, _ in find_pair_sets(ws, SCH))
+
+
+def test_a_pair_counts_only_for_claims_its_declared_set_stays_within(ws):
+    h = _freeze_seir_family(ws)
+    family = (
+        Claim(id=CX, statement="x", scope=TargetFilter()),
+        Claim(id=CXF, statement="x where flat", scope=TargetFilter(), refines=CX),
+        Claim(id=SCH, statement="s", scope=TargetFilter()),
+    )
+    by_claim = _pairs_by_claim(ws, _mission(*family), h)
+    x_pairs = {("x1s1", "x0s1"), ("x1s0", "x0s0")}
+    assert by_claim[CX] == x_pairs  # {cx, cxf}: cxf refines cx
+    assert by_claim[CXF] == x_pairs  # {cx, cxf}: cx is the claim cxf refines
+    assert by_claim[SCH] == {("x1s1", "x1s0"), ("x0s1", "x0s0")}  # conf also differs in the covariate: excluded
+
+
+def test_without_refines_a_pair_over_two_claims_counts_for_neither(ws):
+    h = _freeze_seir_family(ws)
+    unrelated = tuple(Claim(id=c, statement=c, scope=TargetFilter()) for c in (CX, CXF, SCH))
+    by_claim = _pairs_by_claim(ws, _mission(*unrelated), h)
+    assert by_claim[CX] == by_claim[CXF] == set()
+    assert by_claim[SCH] == {("x1s1", "x1s0"), ("x0s1", "x0s0")}

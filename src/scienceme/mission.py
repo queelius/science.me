@@ -22,12 +22,18 @@ class MissionError(ValueError):
 
 
 class Claim(Frozen):
-    """A statement the mission wants evidence on, scoped to the targets that bear on it."""
+    """A statement the mission wants evidence on, scoped to the targets that bear on it.
+
+    `refines` is the id of a broader claim of the same mission that this one narrows to a sub-scope (the
+    same mechanism where, say, it cannot act).  Programs that differ in the mechanism differ on both, so a
+    matched pair declared over the two counts for each (`claims.claim_standings`).
+    """
 
     id: str
     statement: str
     scope: TargetFilter
     weight: float = 0.0
+    refines: str | None = None
 
 
 class Candidate(Frozen):
@@ -77,6 +83,23 @@ class Mission(Frozen):
     required_isolation: Isolation
     run_timeout_s: int = 300
     claims: tuple[Claim, ...] = ()
+
+    @model_validator(mode="after")
+    def _check_refinements(self) -> Mission:
+        """Each `refines` names another claim of the mission, and no chain of them returns to where it began."""
+        broader = {claim.id: claim.refines for claim in self.claims}
+        for claim in self.claims:
+            if claim.refines is not None and (claim.refines == claim.id or claim.refines not in broader):
+                raise ValueError(f"claim {claim.id!r} refines {claim.refines!r}, not another claim of the mission")
+        for claim in self.claims:
+            seen = {claim.id}
+            current = claim.refines
+            while current is not None:
+                if current in seen:
+                    raise ValueError(f"claims refine one another in a cycle through {claim.id!r}")
+                seen.add(current)
+                current = broader[current]
+        return self
 
     def targets(self, spec: StreamSpec, reference_week: int) -> list[Target]:
         """The targets this mission asks of `spec` at `reference_week`.

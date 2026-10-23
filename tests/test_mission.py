@@ -192,3 +192,37 @@ def test_list_missions_without_missions(ws):
     assert list_missions(ws) == []
     ws.missions.rmdir()
     assert list_missions(ws) == []
+
+
+# --- claim families (R11) ---
+
+
+def claim(id: str, refines: str | None = None) -> Claim:
+    return Claim(id=id, statement=id, scope=TargetFilter(), refines=refines)
+
+
+def test_a_claim_refines_nothing_by_default():
+    assert claim("school").refines is None
+
+
+def test_a_claim_may_refine_another_claim_of_its_mission(ws):
+    m = make_mission(claims=(claim("covariate-x"), claim("covariate-x-flat", refines="covariate-x")))
+    save_mission(ws, m)
+    assert load_mission(ws, "m").claims[1].refines == "covariate-x"
+
+
+@pytest.mark.parametrize(
+    "claims",
+    [
+        (claim("covariate-x-flat", refines="covariate-x"),),  # the broader claim is not in the mission
+        (claim("covariate-x", refines="covariate-x"),),  # a claim cannot refine itself
+    ],
+)
+def test_refines_must_name_another_claim_of_the_mission(claims):
+    with pytest.raises(ValidationError, match="not another claim"):
+        make_mission(claims=claims)
+
+
+def test_claims_cannot_refine_one_another_in_a_cycle():
+    with pytest.raises(ValidationError, match="cycle"):
+        make_mission(claims=(claim("a", refines="c"), claim("b", refines="a"), claim("c", refines="b")))
