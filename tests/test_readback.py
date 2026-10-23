@@ -214,9 +214,21 @@ def test_packet_leaves_out_readback_json_and_pycache(ws):
 
 
 @pytest.mark.parametrize(
-    "name", ["README.md", "readme.md", "Readme.TXT", "README", "README.rst", "sub/README.md", "sub/deeper/readme.rst"]
+    "name",
+    [
+        "README.md",
+        "readme.md",
+        "Readme.TXT",
+        "README",
+        "README.rst",
+        "README.markdown",
+        "ReadMe.MarkDown",
+        "sub/README.md",
+        "sub/deeper/readme.rst",
+        "sub/README",
+    ],
 )
-def test_packet_leaves_out_readme_files_in_any_case_extension_and_depth(ws, name):
+def test_packet_leaves_out_readme_files_in_any_case_and_depth_with_a_prose_extension(ws, name):
     d = write_program(ws, "p", CONST)
     path = d / name
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -229,9 +241,22 @@ def test_packet_leaves_out_readme_files_in_any_case_extension_and_depth(ws, name
 
 
 @pytest.mark.parametrize(
-    "name", ["readme_helper.py", "notreadme.md", "docs.md", "sub/readmes.txt", "README.d/notes.md"]
+    "name",
+    [
+        "readme_helper.py",
+        "notreadme.md",
+        "docs.md",
+        "sub/readmes.txt",
+        "README.d/notes.md",
+        "readme.py",
+        "README.json",
+        "sub/Readme.PY",
+        "readme.md.py",
+        "readme.tar.gz",
+    ],
 )
 def test_packet_shows_files_that_only_resemble_a_readme(ws, name):
+    """Code named like a README is still code: only the prose extensions are left out."""
     d = write_program(ws, "p", CONST)
     path = d / name
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -371,6 +396,28 @@ def test_flags():
     assert flags(m, rb.model_copy(update={"inferred_tags": {}})) == {ReadbackFlag.TAG_MISMATCH}
     assert flags(m, rb.model_copy(update={"author_lineage": "anthropic"})) == {ReadbackFlag.SAME_LINEAGE}
     assert flags(m, rb.model_copy(update={"inferred_interface": ()})) == {ReadbackFlag.INTERFACE_MISMATCH}
+
+
+@pytest.mark.parametrize(
+    ("author", "reader"),
+    [
+        ("anthropic", "anthropic"),
+        ("anthropic", "Anthropic/claude"),
+        ("anthropic/claude", "anthropic/opus"),
+        ("ANTHROPIC/claude", "anthropic"),
+        ("anthropic/claude", " Anthropic /claude"),
+    ],
+)
+def test_a_reader_of_the_authors_lineage_family_is_same_lineage(author, reader):
+    """The family is the part before the first `/`, in any case: a vendor's models are one lineage."""
+    assert flags(manifest(author_lineage=author), readback(author_lineage=reader)) == {ReadbackFlag.SAME_LINEAGE}
+
+
+@pytest.mark.parametrize(
+    ("author", "reader"), [("anthropic/claude", "openai/claude"), ("anthropic", "openai/gpt"), ("anthropic", "anthropics")]
+)
+def test_a_reader_of_another_lineage_family_raises_no_lineage_flag(author, reader):
+    assert flags(manifest(author_lineage=author), readback(author_lineage=reader)) == frozenset()
 
 
 def test_a_different_stance_on_a_claim_is_a_tag_mismatch():

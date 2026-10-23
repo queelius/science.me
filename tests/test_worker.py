@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from helpers import CONST, PER_TARGET, at, count_spec, publish, write_program
+from helpers import CONST, PER_TARGET, at, count_spec, covariate_spec, publish, write_program
 
 import scienceme.worker
 from scienceme.archive import Archive, ArchiveView
@@ -15,10 +15,12 @@ from scienceme.model import Isolation, Target
 from scienceme.pmf import Pmf
 from scienceme.registry import Registry, RegistryError
 from scienceme.worker import (
+    MAX_ERROR_CHARS,
     MAX_RESULT_BYTES,
     WorkerError,
     _read_result,
     build_order,
+    package_hash,
     prepare_sandbox,
     run_order,
     scorer_hash,
@@ -304,8 +306,8 @@ def test_a_symlinked_result_is_no_result_even_when_it_points_at_a_valid_one(ws, 
     assert run(ws, view, "p", code, targets=[tgt("A")]) == (Failure(target=tgt("A"), error="no-result"),)
 
 
-def test_the_result_cap_is_inclusive(tmp_path, monkeypatch):
-    order = WorkOrder(program="sha256:" + "a" * 64, manifests={}, view=ArchiveView(as_of=0, specs={}, vintages={}), targets=(tgt("A"),))
+def test_the_result_cap_is_inclusive(tmp_path, view, monkeypatch):
+    order = WorkOrder(program="sha256:" + "a" * 64, manifests={}, view=view, targets=(tgt("A"),))
     result = WorkResult(results=(Prediction(target=tgt("A"), pmf=Pmf.point(2)),))
     data = result.model_dump_json().encode()
     (tmp_path / "result.json").write_bytes(data)
@@ -328,6 +330,65 @@ def test_reading_a_bad_result_leaks_no_descriptor(tmp_path, make):
 
 def test_the_result_cap_is_64_mebibytes():
     assert MAX_RESULT_BYTES == 64 * 1024 * 1024
+
+
+# --- run_order: the host trusts nothing the sandbox reports ---
+
+
+def test_a_forged_pmf_outside_the_support_fails_only_its_target(ws, view):
+    """A program that writes `result.json` itself bypasses the sandbox's checks; the host checks again."""
+    a, b = tgt("A"), tgt("B")
+    forged = WorkResult(
+        results=(Prediction(target=a, pmf=Pmf(lo=10**15, p=(1.0,))), Prediction(target=b, pmf=Pmf.point(3)))
+    )
+    code = _scribble(f"open(out, 'w').write({forged.model_dump_json()!r})")
+    results = run(ws, view, "p", code, targets=[a, b])
+    assert results == (Failure(target=a, error="pmf outside support [0, 1000]"), Prediction(target=b, pmf=Pmf.point(3)))
+
+
+@pytest.mark.parametrize("pmf", [Pmf(lo=-1, p=(0.5, 0.5)), Pmf(lo=1000, p=(0.5, 0.5)), Pmf(lo=10**15, p=(1.0,))])
+def test_reading_a_result_rechecks_every_pmf_against_its_stream_support(tmp_path, view, pmf):
+    order = WorkOrder(program="sha256:" + "a" * 64, manifests={}, view=view, targets=(tgt("A"),))
+    (tmp_path / "result.json").write_text(WorkResult(results=(Prediction(target=tgt("A"), pmf=pmf),)).model_dump_json())
+    assert _read_result(tmp_path, order) == WorkResult(
+        results=(Failure(target=tgt("A"), error="pmf outside support [0, 1000]"),)
+    )
+
+
+def test_reading_a_result_keeps_a_pmf_on_the_edges_of_the_support(tmp_path, view):
+    order = WorkOrder(program="sha256:" + "a" * 64, manifests={}, view=view, targets=(tgt("A"),))
+    result = WorkResult(results=(Prediction(target=tgt("A"), pmf=Pmf(lo=0, p=(0.5,) + (0.0,) * 999 + (0.5,))),))
+    (tmp_path / "result.json").write_text(result.model_dump_json())
+    assert _read_result(tmp_path, order) == result
+
+
+def test_a_forged_forecast_of_a_stream_the_view_cannot_bound_is_a_failure(tmp_path):
+    """The sandbox fails a target whose stream is unknown or has no support; a forged forecast of one does too."""
+    covariate = covariate_spec()
+    view = ArchiveView(as_of=1, specs={covariate.id: covariate}, vintages={covariate.id: ()})
+    unknown = Target(stream="w/elsewhere", jurisdiction="A", reference_week=1, horizon=0)
+    unbounded = Target(stream=covariate.id, jurisdiction="A", reference_week=1, horizon=0)
+    order = WorkOrder(program="sha256:" + "a" * 64, manifests={}, view=view, targets=(unknown, unbounded))
+    forged = WorkResult(results=tuple(Prediction(target=t, pmf=Pmf.point(1)) for t in order.targets))
+    (tmp_path / "result.json").write_text(forged.model_dump_json())
+    first, second = _read_result(tmp_path, order).results
+    assert isinstance(first, Failure) and "unknown stream" in first.error
+    assert isinstance(second, Failure) and "has no support" in second.error
+
+
+@pytest.mark.parametrize("isolation", [Isolation.NONE, Isolation.PROCESS])
+def test_a_failure_reason_is_cut_to_its_first_2000_characters(ws, view, isolation):
+    code = "def predict(ctx, target):\n    raise RuntimeError('x' * 100_000)\n"
+    (failure,) = run(ws, view, "p", code, isolation)
+    assert isinstance(failure, Failure)
+    assert failure.error == ("RuntimeError: " + "x" * 100_000)[:MAX_ERROR_CHARS]
+    assert MAX_ERROR_CHARS == 2000
+
+
+def test_a_forged_failure_reason_is_cut_to_its_first_2000_characters(ws, view):
+    forged = WorkResult(results=(Failure(target=tgt("A"), error="y" * 5000),))
+    code = _scribble(f"open(out, 'w').write({forged.model_dump_json()!r})")
+    assert run(ws, view, "p", code, targets=[tgt("A")]) == (Failure(target=tgt("A"), error="y" * 2000),)
 
 
 def test_the_exit_code_does_not_decide_the_outcome(ws, view):
@@ -551,3 +612,16 @@ def test_scorer_hash_is_over_the_installed_package(monkeypatch):
     real = scorer_hash()
     monkeypatch.setattr(scienceme.worker, "_PACKAGE_DIR", Path(scienceme.__file__).parent)
     assert scorer_hash() == real
+
+
+def test_package_hash_is_the_scorer_hash_of_any_package_directory(tmp_path):
+    """The scorer hash is `package_hash` of the installed `scienceme`; another package hashes the same way."""
+    assert package_hash(Path(scienceme.__file__).parent) == scorer_hash()
+    (tmp_path / "a.py").write_text("A = 1\n")
+    (tmp_path / "notes.txt").write_text("not python")
+    base = package_hash(tmp_path)
+    assert re.fullmatch(r"sha256:[0-9a-f]{64}", base) and base != scorer_hash()
+    (tmp_path / "notes.txt").write_text("still not python")
+    assert package_hash(tmp_path) == base
+    (tmp_path / "a.py").write_text("A = 2\n")
+    assert package_hash(tmp_path) != base

@@ -20,11 +20,11 @@ from pydantic import ValidationError
 from scienceme.archive import Archive, ArchiveError
 from scienceme.claims import claim_standings
 from scienceme.gain import Ranking, load_latest_ranking, rank_wanted, save_ranking
-from scienceme.manifest import ClosureError, PairError, load_manifest
+from scienceme.manifest import READBACK_FILE, ClosureError, PairError, load_manifest
 from scienceme.mission import Mission, MissionError, list_missions, load_mission, load_wanted
 from scienceme.model import Isolation
 from scienceme.predict import OriginReport, run_all, run_origin
-from scienceme.readback import ReadbackError, packet
+from scienceme.readback import ReadbackError, load_readback, packet
 from scienceme.record import RecordError
 from scienceme.registry import Freeze, Registry, RegistryError
 from scienceme.scoring import resolve
@@ -173,13 +173,17 @@ def _readback_packet(ws: Workspace, args: argparse.Namespace) -> int:
 
 
 def _problems(ws: Workspace) -> Iterator[str]:
-    """One line per thing wrong with the workspace's programs, registry and missions."""
+    """One line per thing wrong with the workspace's programs (manifests, read-backs), registry and missions."""
     if ws.programs.is_dir():
         for directory in sorted(d for d in ws.programs.iterdir() if d.is_dir()):
             try:
                 load_manifest(directory)
             except (OSError, ValueError) as e:
                 yield f"programs/{directory.name}: {_describe(e)}"
+            try:
+                load_readback(directory)
+            except ReadbackError as e:  # the cause says what is wrong; the prefix already names the file
+                yield f"programs/{directory.name}/{READBACK_FILE}: {_describe(e.__cause__ or e)}"
     registry = Registry(ws)
     try:
         frozen = list(registry.freezes())
@@ -267,7 +271,9 @@ def build_parser() -> argparse.ArgumentParser:
     readback.add_argument("name", metavar="NAME")
     readback.add_argument("--mission", required=True, metavar="M")
 
-    command("check", _check, "check that every program, mission and wanted list loads and every freeze verifies")
+    command(
+        "check", _check, "check that every program, read-back, mission and wanted list loads and every freeze verifies"
+    )
     return parser
 
 

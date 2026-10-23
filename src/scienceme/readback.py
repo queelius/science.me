@@ -24,6 +24,9 @@ from scienceme.worker_entry import program_dirname
 from scienceme.workspace import Workspace, read_model
 
 _README_STEM = "readme"
+# The extensions of a README that is prose (lowercased; "" for none).  A file named like a README with any
+# other extension (`readme.py`) is code, and the reader sees it.
+_README_SUFFIXES = frozenset({"", ".md", ".markdown", ".txt", ".rst"})
 _LABEL_HEX = 12
 # The only manifest fields the reader sees.  An allowlist, so a field added to the manifest later (a name, a
 # stance, a note) stays hidden until someone decides the reader should see it.
@@ -68,7 +71,8 @@ class Readback(Frozen):
     """What an independent reader says a program assumes.
 
     `author_lineage` and `author_agent` identify the *reader* (the author of this read-back), not the
-    program's author; comparing the lineage with the program's own is how a same-lineage read is caught.
+    program's author; comparing the lineage's family with the program's own is how a same-lineage read is
+    caught.
     """
 
     author_lineage: str
@@ -106,16 +110,26 @@ def load_readback(program_dir: Path) -> Readback | None:
         raise ReadbackError(f"{path}: invalid read-back: {e}") from e
 
 
+def lineage_family(lineage: str) -> str:
+    """The family of a `vendor/family` lineage: its first `/`-separated segment, trimmed and lowercased.
+
+    `anthropic`, `Anthropic/claude` and `anthropic/opus` are one family: a reader from the author's vendor is
+    not independent of the author, whatever model name follows.
+    """
+    return lineage.split("/", 1)[0].strip().lower()
+
+
 def flags(manifest: ProgramManifest, readback: Readback | None) -> frozenset[ReadbackFlag]:
     """The flags raised by comparing `readback` with the author's `manifest`; `{MISSING}` when there is no read-back.
 
-    Tags are compared over every claim either side names (a claim without a tag is UNSPECIFIED), and the
-    interface as the set of variable names.
+    The reader's lineage is compared with the author's by family (`lineage_family`).  Tags are compared over
+    every claim either side names (a claim without a tag is UNSPECIFIED), and the interface as the set of
+    variable names.
     """
     if readback is None:
         return frozenset({ReadbackFlag.MISSING})
     raised: set[ReadbackFlag] = set()
-    if readback.author_lineage == manifest.author_lineage:
+    if lineage_family(readback.author_lineage) == lineage_family(manifest.author_lineage):
         raised.add(ReadbackFlag.SAME_LINEAGE)
     claims = manifest.tags.keys() | readback.inferred_tags.keys()
     if any(
@@ -138,10 +152,11 @@ def packet(ws: Workspace, program: str, claims: Sequence[Claim]) -> str:
     It holds the source of every program in the closure, imports first and `program` last, each file under a
     heading naming the program and the file, then the claims (id and statement) and the `Readback` schema.
     Programs are labelled by the first 12 hex digits of their closure hash, never by name, since a name can
-    encode the author's stance.  README files (any case, any extension, any depth) and `readback.json` are
-    left out; each `program.json` is shown through an allowlist (`entry`, `library`, `imports`, `lens`,
-    `scope`), so the name, lineage, tags, pairs, interface and `supersedes` are hidden; a file that is not
-    UTF-8 text is shown as its size and sha256.  Every member of the closure is verified first
+    encode the author's stance.  README files in prose (stem `readme` in any case, no extension or `.md`,
+    `.markdown`, `.txt` or `.rst`, at any depth) and `readback.json` are left out; each `program.json` is
+    shown through an allowlist (`entry`, `library`, `imports`, `lens`, `scope`), so the name, lineage, tags,
+    pairs, interface and `supersedes` are hidden; a file that is not UTF-8 text is shown as its size and
+    sha256.  Every member of the closure is verified first
     (RegistryError when one is modified, unfrozen or unreadable).  Deterministic.
     """
     registry = Registry(ws)
@@ -168,7 +183,7 @@ def _program_section(registry: Registry, closure_hash: str) -> str:
     label = _label(closure_hash)
     parts = [f"## Program {label}\n"]
     for rel in program_files(program_dir):
-        if Path(rel.name).stem.lower() == _README_STEM:
+        if _is_readme(rel):
             continue
         if rel == Path(MANIFEST_FILE):
             body = _fenced(manifest.model_dump_json(include=_SHOWN_MANIFEST_FIELDS, indent=2))
@@ -176,6 +191,11 @@ def _program_section(registry: Registry, closure_hash: str) -> str:
             body = _file_body(program_dir / rel)
         parts.append(f"### {label}/{rel.as_posix()}\n{body}")
     return "\n".join(parts)
+
+
+def _is_readme(rel: Path) -> bool:
+    """True for a README in prose: stem `readme` and a prose extension (`_README_SUFFIXES`), in any case."""
+    return rel.stem.lower() == _README_STEM and rel.suffix.lower() in _README_SUFFIXES
 
 
 def _file_body(path: Path) -> str:

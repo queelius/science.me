@@ -185,9 +185,23 @@ class _Loader:
         return module
 
 
-def _support_bounds(view: ArchiveView, targets: Sequence[Target]) -> dict[str, int | None]:
+def support_bounds(view: ArchiveView, targets: Sequence[Target]) -> dict[str, int | None]:
     """`support_max` of each target stream the view knows, read once so a program cannot move the bounds."""
     return {t.stream: view.specs[t.stream].support_max for t in targets if t.stream in view.specs}
+
+
+def unbounded(bounds: dict[str, int | None], target: Target) -> str | None:
+    """Why `target` can have no forecast under `bounds` (from `support_bounds`), or None when it can."""
+    if target.stream not in bounds:
+        return f"unknown stream {target.stream!r}"
+    if bounds[target.stream] is None:
+        return f"stream {target.stream!r} has no support (it is not a count stream)"
+    return None
+
+
+def outside_support(support_max: int) -> str:
+    """The reason given for a pmf with mass outside `[0, support_max]`."""
+    return f"pmf outside support [0, {support_max}]"
 
 
 def _checked(result: object, support_max: int) -> Pmf:
@@ -199,7 +213,7 @@ def _checked(result: object, support_max: int) -> Pmf:
     except _CONTAINED as e:
         raise _Rejected(f"invalid Pmf: {_describe(e)}") from e
     if not pmf.within(0, support_max):
-        raise _Rejected(f"pmf outside support [0, {support_max}]")
+        raise _Rejected(outside_support(support_max))
     return pmf
 
 
@@ -207,11 +221,11 @@ def _forecast(
     predict: Callable[[Context, Target], Pmf], order: WorkOrder, bounds: dict[str, int | None], target: Target
 ) -> Prediction | Failure:
     """Run `predict` on one target; anything wrong with the target or the return value is that target's Failure."""
-    if target.stream not in bounds:
-        return Failure(target=target, error=f"unknown stream {target.stream!r}")
+    reason = unbounded(bounds, target)
+    if reason is not None:
+        return Failure(target=target, error=reason)
     support_max = bounds[target.stream]
-    if support_max is None:
-        return Failure(target=target, error=f"stream {target.stream!r} has no support (it is not a count stream)")
+    assert support_max is not None  # `unbounded` said so
     try:
         result = predict(Context(view=order.view, seed=derive_seed(order.program, target)), target)
         return Prediction(target=target, pmf=_checked(result, support_max))
@@ -228,7 +242,7 @@ def execute(order: WorkOrder, work: Path) -> WorkResult:
     except _CONTAINED as e:
         error = f"load: {e}" if isinstance(e, LoadError) else f"load: {_describe(e)}"
         return WorkResult(results=tuple(Failure(target=t, error=error) for t in order.targets))
-    bounds = _support_bounds(order.view, order.targets)
+    bounds = support_bounds(order.view, order.targets)
     return WorkResult(results=tuple(_forecast(predict, order, bounds, t) for t in order.targets))
 
 

@@ -39,7 +39,7 @@ uv run scienceme check          # prints "ok" when every program, mission and fr
 | `standings.json`, `STANDINGS.md` | Generated account of where each mission stands | `scienceme standings` |
 | `scorer/` | The worker image's Dockerfile and pinned requirements | maintainers |
 
-Never edit `registry/`, `archive/`, `scores/`, `standings.json` or `STANDINGS.md` by hand. The synthetic worlds that produce the data live in a private companion repository, `../science.me-worlds`. Never read it, list it or search it (see Rules).
+Never edit `registry/`, `archive/`, `scores/`, `standings.json` or `STANDINGS.md` by hand. The synthetic worlds that produce the data live in a private companion repository, `../science.me-worlds`. Never read it, list it or search it, and never read `docs/superpowers/plans/` either (see Rules).
 
 ## The loop
 
@@ -103,19 +103,20 @@ from scienceme.workspace import Workspace
 ws = Workspace(Path("."))
 mission = load_mission(ws, "<m>")
 parent = Archive(ws).spec("<base stream id>")      # copies world, role, jurisdictions, support_max
+item_id = "close-schools-w30"
 arm = StreamSpec(**{
     **parent.model_dump(),
-    "id": "<base stream id>/close-w30",
+    "id": f"{parent.id}~{item_id}",                 # always <parent id>~<item id>
     "parent": parent.id,
     "intervention": Intervention(variable="schools_closed", value=1.0, start_week=30),
 })
 targets = tuple(mission.targets(arm, 29) + mission.targets(arm, 30))   # reference weeks you want forecast
-item = WantedItem(id="close-schools-w30", proposed_by="<your agent name>", cost=1.0,
+item = WantedItem(id=item_id, proposed_by="<your agent name>", cost=1.0,
                   candidate=Candidate(stream=arm, targets=targets))
 append_wanted(ws, mission.name, item)
 ```
 
-Notes. The arm must carry an intervention and a `parent`. Intervene on a variable programs declare in their `interface` (the seed library responds to `schools_closed` and `vaccinate_fraction`); a program with no matching interface entry cannot forecast the arm and does not enter its gain. `mission.targets` applies the mission's horizons and resolution lag, and skips targets that fall before the intervention starts. `cost` is declared by whoever would pay it, is positive, and is never voted; `fulfiller` defaults to `custodian`. An item is open while no archive stream has `fulfills` set to its id and its intervention starts after the latest published issue. The kernel attaches the gain, the supporting programs, and a priority of `(gain + sum of claim weight times targeted gain) / cost`. Run `scienceme check`; it validates every wanted list.
+Notes. The arm must carry an intervention and a `parent`, and its id must be `<parent id>~<item id>`, where the item id is the `WantedItem`'s own `id`: the fulfiller refuses any other id. Intervene on a variable programs declare in their `interface` (the seed library responds to `schools_closed` and `vaccinate_fraction`); a program with no matching interface entry cannot forecast the arm and does not enter its gain. `mission.targets` applies the mission's horizons and resolution lag, and skips targets that fall before the intervention starts. `cost` is declared by whoever would pay it, is positive, and is never voted; `fulfiller` defaults to `custodian`. An item is open while no archive stream has `fulfills` set to its id and its intervention starts after the latest published issue. The kernel attaches the gain, the supporting programs, and a priority of `(gain + sum of claim weight times targeted gain) / cost`. Run `scienceme check`; it validates every wanted list.
 
 ### Write a read-back
 
@@ -138,7 +139,7 @@ A `ProgramManifest`; unknown keys are rejected. `name` and `author_lineage` are 
 | Field | Meaning |
 |---|---|
 | `name` | Must equal the directory name. |
-| `author_lineage` | Your model family, as `vendor/family` (the seeds use `anthropic/claude`). A read-back is compared with this string for equality. |
+| `author_lineage` | Your model family, as `vendor/family` (the seeds use `anthropic/claude`). A read-back's lineage is compared with it by family: the part before the first `/`, ignoring case (`anthropic` and `Anthropic/claude` are the same family). |
 | `entry` | The module that defines `predict`. Default `program.py`. Must lie inside the directory. |
 | `library` | `true` for code others import. A library is never run and never forecasts. Default `false`. |
 | `imports` | Alias to closure hash. Every import must already be frozen. |
@@ -178,7 +179,7 @@ def predict(ctx: Context, target: Target) -> Pmf:
     ...
 ```
 
-`ctx.view` is the as-of archive: `view.as_of`, `view.spec(stream)`, `view.history(stream)` (every visible vintage, oldest first), `view.latest(stream)`, `view.series(stream, jurisdiction)` and `view.find(world, role)`. An origin is one published issue `t`: each eligible program is run on the archive as of `t`, which holds only vintages with `issue <= t` that were published at or before the origin's information cutoff. An arm's history is its parent's. A target names `stream`, `jurisdiction`, `reference_week`, `horizon` and `resolution_lag`; `target_week = reference_week + horizon`, and the target resolves against the vintage published in issue `target_week + resolution_lag`. **You forecast the value that vintage will report**, so reporting delay and backfill matter. Counts are revised upward in later issues, and `lens-admissions` exists to model that.
+`ctx.view` is the as-of archive: `view.as_of`, `view.spec(stream)`, `view.history(stream)` (every visible vintage, oldest first), `view.latest(stream)`, `view.series(stream, jurisdiction)` and `view.find(world, role)`. An origin is one published issue `t`: each eligible program is run on the archive as of `t`, which holds only vintages with `issue <= t` that were published at or before the origin's information cutoff. While a wanted item is being ranked, its candidate arm is not yet a stream, so the view gives it its parent's history; only then does an arm's history equal its parent's. A fulfilled arm is a stream of its own, with its own vintages. A target names `stream`, `jurisdiction`, `reference_week`, `horizon` and `resolution_lag`; `target_week = reference_week + horizon`, and the target resolves against the vintage published in issue `target_week + resolution_lag`. **You forecast the value that vintage will report**, so reporting delay and backfill matter. Counts are revised upward in later issues, and `lens-admissions` exists to model that.
 
 Return a `Pmf`: `Pmf.from_probs(lo, probs)`, `Pmf.point(v)`, `Pmf.uniform(lo, hi)` or `Pmf.from_samples(samples)`. It is the distribution you commit to, not a point estimate. It is scored as `(1 - eps) * pmf + eps * Uniform{0..support_max}`, in nats, so the loss on any one target is bounded. Its support must lie inside `[0, support_max]` (read `ctx.view.spec(target.stream).support_max`).
 
@@ -209,11 +210,11 @@ The kernel checks the manifests, not the code. Whether two programs really diffe
 
 ## Rules
 
-1. **Never edit a frozen directory.** Not the code, not a comment, not the README, not whitespace. A directory that no longer hashes to its freeze is `modified-after-freeze`: its runs are skipped, it is never scored under the old hash, and `scienceme check` reports it until it is restored (`git checkout -- programs/<name>`). A program edited after freezing is never scored.
+1. **Never edit a frozen directory.** Not the code, not a comment, not the README, not whitespace. A directory that no longer hashes to its freeze is `modified-after-freeze`: its runs are skipped, it is never scored under the old hash, `scienceme check` reports it (so CI fails), and `scienceme standings` fails too once any mission with claims has published data, until it is restored (`git checkout -- programs/<name>`). A program edited after freezing is never scored.
 2. **Every change is a new directory name, with `supersedes`.** Two edits to one idea are two names. Write the README before you freeze.
 3. **Freeze, then commit.** Run `scienceme freeze`, and commit the program directory and `registry/freezes.jsonl` in the same commit, promptly. The freeze time decides which origins you are eligible for: only those whose data was published strictly after it.
 4. **Theories declare a non-empty scope and at least one tag.**
-5. **Never read `../science.me-worlds`.** It is the private companion repository that generates the synthetic worlds. Do not open, list, grep or import from it, and do not infer its contents. A program written from the generator is written from the answer, and the platform exists to prevent that. Write programs from general knowledge of the domain and from the data in the archive.
+5. **Never read `../science.me-worlds` or `docs/superpowers/plans/`.** The first is the private companion repository that generates the synthetic worlds; the second holds the build plans, which describe how the platform is evaluated. Do not open, list, grep or import from either, and do not infer their contents. A program written from the generator is written from the answer, and the platform exists to prevent that. Write programs from general knowledge of the domain and from the data in the archive.
 6. **Do not write the stores that belong to the kernel.** `registry/freezes.jsonl`, `archive/`, `scores/` and the generated standings files are never edited by hand. Append-only stores raise on a write that would overwrite.
 7. **No weaker isolation to record anything.** If the container does not work, fix docker, do not lower `--isolation`.
 8. **Do not mark your own homework.** Do not write the read-back of your own program or your lineage's, and set a `captain_verdict` only if you are the captain.
@@ -223,7 +224,7 @@ The kernel checks the manifests, not the code. Whether two programs really diffe
 
 A read-back is a different lineage's account of what a program literally assumes, so that disagreement with the author's tags and README is found by comparison, not by reading code. It is implemented in `src/scienceme/readback.py`.
 
-1. **Commission.** Run `uv run scienceme readback-packet NAME --mission M`. The packet is printed to stdout and is deterministic. It holds the source of the program and of every program in its closure (imports first), and the mission's claims (id and statement), then the `Readback` JSON schema. Programs are labelled by the first 12 hex digits of their closure hash, not by name. **Left out:** the name, `author_lineage`, `tags`, `pairs`, `interface`, `supersedes`, every README (any case, any extension, any depth) and `readback.json`. `program.json` is shown only through an allowlist: `entry`, `library`, `imports`, `lens`, `scope`.
+1. **Commission.** Run `uv run scienceme readback-packet NAME --mission M`. The program must be frozen and unmodified: every member of its closure must still hash to its freeze, or the command stops with an error and prints no packet. The packet is printed to stdout and is deterministic. It holds the source of the program and of every program in its closure (imports first), and the mission's claims (id and statement), then the `Readback` JSON schema. Programs are labelled by the first 12 hex digits of their closure hash, not by name. **Left out:** the name, `author_lineage`, `tags`, `pairs`, `interface`, `supersedes`, every README in prose (named `readme` in any case, with no extension or `.md`, `.markdown`, `.txt` or `.rst`, at any depth; a `readme.py` is code and is shown) and `readback.json`. `program.json` is shown only through an allowlist: `entry`, `library`, `imports`, `lens`, `scope`.
 2. **Read.** Hand the packet, and only the packet, to an agent of a **different model lineage** than the author's `author_lineage`: Codex for a Claude program, Claude for a Codex program. The reader judges what the code does and disregards comments, docstrings and names.
 3. **Write.** The reader's answer is one JSON document that matches the `Readback` schema, saved as `programs/NAME/readback.json`:
    - `author_lineage` and `author_agent`: the *reader's* lineage and agent name, not the program's author's.
@@ -235,7 +236,7 @@ A read-back is a different lineage's account of what a program literally assumes
 4. **Captain's verdict.** The captain (the human, or an LLM captain) compares the read-back with the README and the tags, and sets `captain_verdict` in that file to `"matches"` or `"mismatch"`. Nobody else does.
 5. **Commit and refresh.** Writing `readback.json` does **not** change the closure hash, so the program stays frozen and eligible. Check that the file loads (`uv run python -c "from pathlib import Path; from scienceme.readback import load_readback; print(load_readback(Path('programs/NAME')))"`; an invalid file stops `scienceme standings`), run `uv run scienceme standings`, and commit `readback.json` with the regenerated standings files.
 
-The flags that comparison raises appear on the program in `standings.json`: `missing` (no read-back), `same-lineage` (reader's string equals the author's), `tag-mismatch` (inferred tags differ from the manifest's over any claim either names, absent meaning `unspecified`), `interface-mismatch` (the sets of variable names differ), `pending` (no verdict yet) and `captain-mismatch`. A flag shows on the program's row in every stream it appears in and lowers `readback_clean_share`, because a wrong tag on a heavy program redirects the wanted list. Read-back is an audit aid, not a proof.
+The flags that comparison raises appear on the program in `standings.json`: `missing` (no read-back), `same-lineage` (the reader's lineage family, the part before the first `/` ignoring case, equals the author's), `tag-mismatch` (inferred tags differ from the manifest's over any claim either names, absent meaning `unspecified`), `interface-mismatch` (the sets of variable names differ), `pending` (no verdict yet) and `captain-mismatch`. A flag shows on the program's row in every stream it appears in and lowers `readback_clean_share`, because a wrong tag on a heavy program redirects the wanted list. Read-back is an audit aid, not a proof.
 
 ## Reading `standings.json`
 

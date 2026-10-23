@@ -15,7 +15,7 @@ from scienceme.manifest import ClosureError, InterfaceVar, PairError, Tag
 from scienceme.mission import Candidate, Claim, Mission, MissionError, WantedItem, append_wanted, save_mission
 from scienceme.model import Intervention, Isolation, Target, TargetFilter, Timing
 from scienceme.predict import OriginReport
-from scienceme.readback import ReadbackError
+from scienceme.readback import Readback, ReadbackError
 from scienceme.record import RecordError, RecordStore
 from scienceme.registry import Freeze, Registry, RegistryError, Withdrawal
 from scienceme.worker import WorkerError
@@ -61,6 +61,12 @@ def publish_issues(ws, issues=range(1, 6)) -> None:
 
 def one_line(text: str) -> bool:
     return len(text.strip().splitlines()) == 1
+
+
+def append(path, text: str) -> None:
+    """Append `text` to the file at `path`, closing it."""
+    with path.open("a", encoding="utf-8") as f:
+        f.write(text)
 
 
 # --- parsing and exit codes ---
@@ -593,7 +599,7 @@ def test_check_reports_every_problem_on_its_own_line(clean, cli):
     (clean.programs / "empty").mkdir()
     (clean.missions / "bad").mkdir()
     (clean.missions / "bad" / "mission.json").write_text('{"name": "bad"}')
-    (clean.missions / "m" / "wanted.jsonl").open("a").write('{"id": "x"}\n')
+    append(clean.missions / "m" / "wanted.jsonl", '{"id": "x"}\n')
     code, out, _ = cli("check")
     assert code == 1
     lines = out.strip().splitlines()
@@ -611,7 +617,7 @@ def test_check_reports_every_problem_on_its_own_line(clean, cli):
 
 
 def test_check_flags_an_unparsable_wanted_list(clean, cli):
-    (clean.missions / "m" / "wanted.jsonl").open("a").write("not json\n")
+    append(clean.missions / "m" / "wanted.jsonl", "not json\n")
     code, out, _ = cli("check")
     assert code == 1 and one_line(out)
     assert out.startswith("missions/m/wanted.jsonl: ")
@@ -624,12 +630,39 @@ def test_check_flags_an_unreadable_mission_file(clean, cli):
 
 
 def test_check_flags_a_corrupt_registry_and_still_checks_the_rest(clean, cli):
-    clean.registry.open("a").write("garbage\n")
+    append(clean.registry, "garbage\n")
     (clean.missions / "m" / "mission.json").write_text("{")
     code, out, _ = cli("check")
     assert code == 1
     lines = out.strip().splitlines()
     assert len(lines) == 2 and any(line.startswith("registry: ") for line in lines)
+
+
+def test_check_flags_an_invalid_readback(clean, cli):
+    (clean.programs / "p" / "readback.json").write_text('{"not": "a readback"}')
+    code, out, _ = cli("check")
+    assert code == 1 and one_line(out)
+    assert out.startswith("programs/p/readback.json: ") and "author_lineage" in out
+
+
+def test_check_flags_an_unparsable_readback_of_an_unfrozen_program(clean, cli):
+    write_program(clean, "draft", CONST)
+    (clean.programs / "draft" / "readback.json").write_text("{")
+    code, out, _ = cli("check")
+    assert code == 1 and one_line(out) and out.startswith("programs/draft/readback.json: ")
+
+
+def test_check_accepts_a_valid_readback(clean, cli):
+    readback = Readback(
+        author_lineage="openai/gpt",
+        author_agent="codex",
+        assumptions=(),
+        inferred_tags={},
+        inferred_interface=("schools_closed",),
+        summary="",
+    )
+    (clean.programs / "p" / "readback.json").write_text(readback.model_dump_json())
+    assert cli("check") == (0, "ok\n", "")
 
 
 def test_check_ignores_files_among_the_programs(clean, cli):

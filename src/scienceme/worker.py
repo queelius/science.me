@@ -10,11 +10,19 @@ invalid `result.json`, or one whose targets are not the order's targets one for 
 target with `no-result`.  A run that outlives its timeout fails every target with `timeout`.  Every run gets
 fresh temporary work and output directories, removed afterwards.
 
+Nothing the sandbox reports is trusted.  In `PROCESS` and `CONTAINER` mode the program can write
+`result.json` itself, around every check the in-sandbox runner makes, so the host checks again: a forecast
+whose pmf leaves its stream's `[0, support_max]` (or whose stream has no support) becomes that target's
+Failure, and every failure's reason is cut to its first `MAX_ERROR_CHARS` characters.
+
 A run that cannot happen at all (docker missing, the image absent, the daemon refusing the container) is
 not the program's failure: it raises `WorkerError`.
 
 Only `CONTAINER` enforces an information boundary.  `NONE` and `PROCESS` run program code with the host
 user's full access to the filesystem and network; they exist for simulation studies and trusted programs.
+`NONE` shares even the objects: every program run on one origin is handed the same `ArchiveView` object
+(`order.view`, which `ctx.view` is), so a program that mutates it changes what the programs after it see.
+Run only trusted programs that way.
 """
 
 from __future__ import annotations
@@ -41,10 +49,14 @@ from scienceme.worker_entry import (
     PROGRAMS_DIR,
     RESULT_FILE,
     Failure,
+    Prediction,
     WorkOrder,
     WorkResult,
     execute,
+    outside_support,
     program_dirname,
+    support_bounds,
+    unbounded,
 )
 from scienceme.workspace import Workspace, write_new
 
@@ -74,6 +86,10 @@ _READ_CHUNK = 1 << 20
 # memory limit does not cover, so it is never read without this bound.
 MAX_RESULT_BYTES = 64 * 1024 * 1024
 
+# The most of a failure's reason that is kept, in characters.  The reason is the program's to choose (an
+# exception's message, or whatever it writes into `result.json`) and it is stored in the record.
+MAX_ERROR_CHARS = 2000
+
 
 class WorkerError(RuntimeError):
     """The sandbox could not be run at all (docker missing, image absent, daemon error): not a program failure."""
@@ -84,18 +100,23 @@ def worker_image() -> str:
     return os.environ.get(IMAGE_ENV) or DEFAULT_IMAGE
 
 
-def scorer_hash() -> str:
-    """`sha256:` plus a digest of the installed `scienceme` package's `*.py` files, by relative path and content.
+def package_hash(directory: Path) -> str:
+    """`sha256:` plus a digest of the `*.py` files under `directory`, by relative path and content.
 
-    The same code hashes the same wherever it is installed, so a result can be stamped with the scorer that
+    The same code hashes the same wherever it is installed, so a result can be stamped with the code that
     produced it.
     """
     entries = sorted(
-        [path.relative_to(_PACKAGE_DIR).as_posix(), hashlib.sha256(path.read_bytes()).hexdigest()]
-        for path in _PACKAGE_DIR.rglob("*.py")
+        [path.relative_to(directory).as_posix(), hashlib.sha256(path.read_bytes()).hexdigest()]
+        for path in directory.rglob("*.py")
         if path.is_file()
     )
     return "sha256:" + hashlib.sha256(json.dumps(entries, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def scorer_hash() -> str:
+    """The `package_hash` of the installed `scienceme` package: the scorer a result was produced by."""
+    return package_hash(_PACKAGE_DIR)
 
 
 def build_order(ws: Workspace, program: str, view: ArchiveView, targets: Sequence[Target]) -> WorkOrder:
@@ -158,7 +179,7 @@ def run_order(
         work = Path(work_name)
         prepare_sandbox(ws, order, work)
         if isolation is Isolation.NONE:
-            return execute(order, work)
+            return _host_checked(order, execute(order, work))
         with tempfile.TemporaryDirectory(prefix="scienceme-out-") as out_name:
             out = Path(out_name)
             try:
@@ -270,7 +291,8 @@ def _failures(order: WorkOrder, error: str) -> WorkResult:
 
 
 def _read_result(out: Path, order: WorkOrder) -> WorkResult:
-    """The result the run left in `out`, or `no-result` for every target when it is not a valid result for `order`."""
+    """The result the run left in `out` as the host checked it (`_host_checked`), or `no-result` for every
+    target when it is not a valid result for `order`."""
     no_result = _failures(order, _NO_RESULT)
     try:
         data = _read_capped(out / RESULT_FILE, MAX_RESULT_BYTES)
@@ -279,7 +301,31 @@ def _read_result(out: Path, order: WorkOrder) -> WorkResult:
         result = WorkResult.model_validate_json(data)
     except (OSError, ValueError):  # missing or unreadable, not UTF-8, not JSON, not a WorkResult
         return no_result
-    return result if tuple(r.target for r in result.results) == order.targets else no_result
+    if tuple(r.target for r in result.results) != order.targets:
+        return no_result
+    return _host_checked(order, result)
+
+
+def _host_checked(order: WorkOrder, result: WorkResult) -> WorkResult:
+    """`result` with each forecast checked against its stream's support in the order's view, read once.
+
+    A pmf outside `[0, support_max]`, or a forecast of a stream the view cannot bound, becomes that target's
+    Failure (with the reasons the in-sandbox runner gives), and every failure's reason is cut to its first
+    `MAX_ERROR_CHARS` characters.
+    """
+    bounds = support_bounds(order.view, order.targets)
+    checked: list[Prediction | Failure] = []
+    for r in result.results:
+        if isinstance(r, Prediction):
+            reason = unbounded(bounds, r.target)
+            support_max = bounds.get(r.target.stream)
+            if reason is None and support_max is not None and not r.pmf.within(0, support_max):
+                reason = outside_support(support_max)
+            r = r if reason is None else Failure(target=r.target, error=reason)
+        if isinstance(r, Failure) and len(r.error) > MAX_ERROR_CHARS:
+            r = Failure(target=r.target, error=r.error[:MAX_ERROR_CHARS])
+        checked.append(r)
+    return WorkResult(results=tuple(checked))
 
 
 def _read_capped(path: Path, cap: int) -> bytes | None:
