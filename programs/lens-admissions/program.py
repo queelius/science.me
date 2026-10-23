@@ -6,6 +6,9 @@ reported `d + 1` issues after the week (chain ladder over consecutive vintages);
 latest vintage by it.  `observe_pmf` is the negative binomial observation model and `fit_dispersion` its
 method-of-moments size.
 
+`observe_pmf` and `truncate` cut the upper tail of every pmf they build where it holds less than `TAIL` of
+the mass.  What is cut is left to the uniform floor the scorer mixes into every forecast.
+
 A library: it has no `predict` and is imported by the programs that forecast.
 """
 
@@ -22,8 +25,9 @@ from scienceme.sdk import Pmf
 if TYPE_CHECKING:
     from scienceme.archive import ArchiveView
 
-# The negative binomial is cut where its upper tail holds less than this much mass.
-TAIL = 1e-12
+# A pmf is cut where its upper tail holds less than this much mass: a long, almost empty tail costs memory and
+# time out of proportion to the probability it holds, and the scoring floor covers it.
+TAIL = 1e-6
 # The widest observation noise the lens fits: a negative binomial size below 1 is not estimated.
 MIN_DISPERSION = 1.0
 
@@ -104,8 +108,8 @@ def observe_pmf(mean: float, dispersion: float, support_max: int) -> Pmf:
     """Negative binomial with `mean` and size `dispersion` (variance `mean + mean**2 / dispersion`) on 0 .. support_max.
 
     An infinite size is the Poisson.  The upper tail beyond the `1 - TAIL` quantile is cut, as is anything
-    above `support_max`, and the rest renormalized.  ValueError for a mean that is not finite and
-    non-negative or a size that is not positive.
+    above `support_max`, and the rest renormalized; the lower end is not touched.  ValueError for a mean that
+    is not finite and non-negative or a size that is not positive.
     """
     if not (math.isfinite(mean) and mean >= 0):
         raise ValueError(f"mean must be finite and non-negative, got {mean!r}")
@@ -121,6 +125,18 @@ def observe_pmf(mean: float, dispersion: float, support_max: int) -> Pmf:
     log_p = dist.logpmf(np.arange(hi + 1))
     p = np.exp(log_p - log_p.max())
     return Pmf.from_probs(0, p / p.sum())
+
+
+def truncate(pmf: Pmf) -> Pmf:
+    """`pmf` with its upper tail cut at its `1 - TAIL` quantile (the smallest y with `P(Y <= y) >= 1 - TAIL`)
+    and renormalized.  The lower end is not touched, and a pmf with no tail that thin is returned as it is.
+    """
+    cdf = np.cumsum(pmf.p)
+    keep = int(np.searchsorted(cdf, 1 - TAIL)) + 1
+    if keep >= len(pmf.p):
+        return pmf
+    p = np.asarray(pmf.p[:keep])
+    return Pmf.from_probs(pmf.lo, p / p.sum())
 
 
 def fit_dispersion(observed: np.ndarray, expected: np.ndarray) -> float:

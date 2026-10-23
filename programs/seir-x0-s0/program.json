@@ -5,7 +5,7 @@
   "library": false,
   "imports": {
     "core": "sha256:2984b076daee7bd0b72361408a9c6a2ea3b2a33bc2cb185dd9f130fc6ee06e9e",
-    "lens": "sha256:80e5f63fc3a6dabeab3bedb48a73a637cb51109a33f760abbd6147b0aa318fc2"
+    "lens": "sha256:0225579ce1834e82398db5753196572e653d37260fd59f1fdd44b1b08000f9c6"
   },
   "lens": "lens",
   "scope": {
@@ -40,15 +40,15 @@
   "pairs": [
     {
       "claim": "covariate-x",
-      "partner": "sha256:a4cc5120d074cbc40161ec315da73ccee0af9a04a65dd7c8d79e18f42373f8d7"
+      "partner": "sha256:c50a99e377fec8913a89861562df2cfa655d36eac1e64b2e8825198b2382435a"
     },
     {
       "claim": "covariate-x-flat",
-      "partner": "sha256:a4cc5120d074cbc40161ec315da73ccee0af9a04a65dd7c8d79e18f42373f8d7"
+      "partner": "sha256:c50a99e377fec8913a89861562df2cfa655d36eac1e64b2e8825198b2382435a"
     },
     {
       "claim": "school",
-      "partner": "sha256:ffee31d022b2ed70d2466c2561c4ecca55b5b854bcd320899c9ab7505fe7fede"
+      "partner": "sha256:c5bf0e5a3b2f595c8a9ec8e979dcda0010f1ecb88f7b9e42927cceca7ca0326e"
     }
   ],
   "supersedes": null

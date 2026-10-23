@@ -3,7 +3,8 @@
 `z = log1p` of the lens's nowcast over the last 16 weeks is regressed on its two previous values (with an
 intercept) by least squares.  4000 paths are run forward from the last two weeks to the target week, each
 step adding a residual drawn with replacement.  Each path's end is turned back into a count, scaled to
-what the resolution vintage will report, rounded, and the paths' empirical distribution is the forecast.
+what the resolution vintage will report, rounded, and the paths' empirical distribution, cut by the lens at
+its upper tail, is the forecast.
 """
 
 from __future__ import annotations
@@ -42,4 +43,4 @@ def predict(ctx: Context, target: Target) -> Pmf:
         state = np.column_stack([np.clip(step, 0.0, ceiling), state[:, :-1]])
     fraction = lens.reported_fraction(view, target.stream, target.jurisdiction, target.resolution_lag)
     counts = np.clip(np.rint(np.expm1(state[:, 0]) * fraction), 0, support_max).astype(np.int64)
-    return Pmf.from_samples(counts)
+    return lens.truncate(Pmf.from_samples(counts))

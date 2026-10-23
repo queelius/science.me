@@ -4,7 +4,7 @@
   "entry": "program.py",
   "library": false,
   "imports": {
-    "lens": "sha256:80e5f63fc3a6dabeab3bedb48a73a637cb51109a33f760abbd6147b0aa318fc2"
+    "lens": "sha256:0225579ce1834e82398db5753196572e653d37260fd59f1fdd44b1b08000f9c6"
   },
   "lens": "lens",
   "scope": {

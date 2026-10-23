@@ -54,6 +54,9 @@ NOISE_SIZE = 40.0  # negative binomial size of the eventual counts around the tr
 SEED = 20261023  # the fixture's epidemic
 COVERAGE_SEEDS = range(1, 21)  # further epidemics for the calibration test
 SUPPORT_MAX = 20000
+WORLDS_SUPPORT_MAX = 1_000_000  # the support of the worlds' admissions streams
+FAR_AHEAD = 15  # weeks from the view's as_of to a ranked candidate's reference week
+MAX_ENTRIES = 500_000  # what a far-ahead pmf may span
 ORIGIN = 16
 HORIZONS = (0, 1, 2, 3)
 LAG = 2
@@ -243,6 +246,23 @@ def test_seed_fit_tracks_its_own_model(seed_ws, origin):
     assert inside >= 3
 
 
+def memory_view(counts: dict[str, np.ndarray], specs: dict = SPECS) -> ArchiveView:
+    """The view at the origin of the epidemic with eventual `counts`: issues 1 .. ORIGIN, held in memory."""
+    published = [issue_rows(counts, issue) for issue in range(1, ORIGIN + 1)]
+    vintages = {
+        stream: tuple(
+            Vintage(
+                stream=stream,
+                issue=issue,
+                rows=tuple(Row(jurisdiction=j, week=w, value=v) for (j, w), v in sorted(rows[stream].items())),
+            )
+            for issue, rows in enumerate(published, start=1)
+        )
+        for stream in specs
+    }
+    return ArchiveView(as_of=ORIGIN, specs=specs, vintages=vintages)
+
+
 def coverage(ws, program: str, seeds: range) -> float:
     """Share of the realized values inside the program's 90% central intervals, at every jurisdiction and
     horizon of an origin at week 16, pooled over one fresh epidemic per seed (each an in-memory view)."""
@@ -255,19 +275,7 @@ def coverage(ws, program: str, seeds: range) -> float:
     inside = 0
     for seed in seeds:
         counts = eventual(core, seed)
-        published = [issue_rows(counts, issue) for issue in range(1, ORIGIN + 1)]
-        vintages = {
-            stream: tuple(
-                Vintage(
-                    stream=stream,
-                    issue=issue,
-                    rows=tuple(Row(jurisdiction=j, week=w, value=v) for (j, w), v in sorted(rows[stream].items())),
-                )
-                for issue, rows in enumerate(published, start=1)
-            )
-            for stream in SPECS
-        }
-        view = ArchiveView(as_of=ORIGIN, specs=SPECS, vintages=vintages)
+        view = memory_view(counts)
         for target, pmf in zip(targets, forecast(ws, program, view, targets), strict=True):
             week = target.target_week
             realized = reported(counts[target.jurisdiction][week], target.resolution_issue, week)
@@ -323,6 +331,52 @@ def test_one_origin_runs_in_under_30_seconds(origin):
     assert elapsed < 30
 
 
+@pytest.fixture(scope="module")
+def far_ahead(seed_ws):
+    """Per theory: its pmfs (by jurisdiction) for targets FAR_AHEAD weeks past the view, on a stream with the
+    worlds' support, and the seconds the run took."""
+    specs = {**SPECS, ADM: count_spec(id=ADM, jurisdictions=JURISDICTIONS, support_max=WORLDS_SUPPORT_MAX)}
+    view = memory_view(eventual(load_library("seir-core"), SEED), specs)
+    targets = [
+        Target(stream=ADM, jurisdiction=j, reference_week=ORIGIN + FAR_AHEAD, horizon=0, resolution_lag=LAG)
+        for j in JURISDICTIONS
+    ]
+    ran = {}
+    for program in THEORIES:
+        start = time.perf_counter()
+        pmfs = forecast(seed_ws, program, view, targets)
+        ran[program] = (dict(zip(JURISDICTIONS, pmfs, strict=True)), time.perf_counter() - start)
+    return ran
+
+
+@pytest.mark.parametrize("program", THEORIES)
+def test_a_far_ahead_run_returns_within_10_seconds(far_ahead, program):
+    assert far_ahead[program][1] < 10
+
+
+# This fit's parameter draws include a few extreme ones, so the negative binomial matched to their mixture
+# has size 0.1 and its own 1 - 1e-6 quantile lies beyond the support: the cut leaves it at the support.
+TOO_WIDE = {("seir-x0-s0", "B"): "the matched negative binomial's 1 - 1e-6 quantile is past the support"}
+# flex-loglinear is left out: its pmf is the empirical distribution of 4000 paths, each holding 1/4000 of the
+# mass, so a cut at the 1 - 1e-6 quantile keeps every path and its width is the bootstrap's spread.
+COMPACT = [
+    pytest.param(
+        program,
+        j,
+        marks=pytest.mark.xfail(strict=True, reason=TOO_WIDE[program, j]) if (program, j) in TOO_WIDE else (),
+        id=f"{program}-{j}",
+    )
+    for program in THEORIES
+    if program != "flex-loglinear"
+    for j in JURISDICTIONS
+]
+
+
+@pytest.mark.parametrize("program, jurisdiction", COMPACT)
+def test_far_ahead_pmfs_are_compact(far_ahead, program, jurisdiction):
+    assert len(far_ahead[program][0][jurisdiction].p) < MAX_ENTRIES
+
+
 # --- the lens's contract ---
 
 
@@ -340,8 +394,36 @@ def test_observe_pmf_never_leaves_the_support(lens):
 
 def test_observe_pmf_cuts_the_negative_binomial_at_its_upper_tail(lens):
     pmf = lens.observe_pmf(200.0, 10.0, 10**6)
-    assert pmf.hi == int(stats.nbinom(10.0, 10.0 / 210.0).ppf(1 - 1e-12))
-    assert pmf.prob(200) == pytest.approx(stats.nbinom(10.0, 10.0 / 210.0).pmf(200), rel=1e-9)
+    assert pmf.hi == int(stats.nbinom(10.0, 10.0 / 210.0).ppf(1 - 1e-6))
+    assert pmf.prob(200) == pytest.approx(stats.nbinom(10.0, 10.0 / 210.0).pmf(200), rel=1e-5)
+
+
+@pytest.mark.parametrize("mean, size", [(200.0, 10.0), (5.0, 0.7), (4000.0, 3.0), (0.5, math.inf)])
+def test_observe_pmf_truncation_removes_at_most_a_millionth(lens, mean, size):
+    dist = stats.poisson(mean) if math.isinf(size) else stats.nbinom(size, size / (size + mean))
+    pmf = lens.observe_pmf(mean, size, 10**6)
+    assert dist.sf(pmf.hi) <= 1e-6  # what is cut holds at most 1e-6 of the mass
+    assert dist.sf(pmf.hi - 1) > 1e-6  # and the cut is the first place that holds
+    assert pmf.lo == 0  # the lower end is untouched
+    kept = 1 - dist.sf(pmf.hi)
+    assert pmf.prob(0) == pytest.approx(dist.pmf(0) / kept, rel=1e-9)
+
+
+def test_truncate_cuts_a_pmf_at_its_upper_tail(lens):
+    bulk = np.full(50, 0.02 * (1 - 2.5e-6))
+    pmf = Pmf.from_probs(7, [*bulk, 0.0, 0.0, 2e-6, 0.0, 5e-7])  # atoms of 2e-6 and 5e-7 above the bulk
+    cut = lens.truncate(pmf)
+    assert cut.lo == 7  # the lower end is untouched
+    assert cut.hi == 7 + 52  # the 2e-6 atom stays (dropping it removes more than 1e-6); the 5e-7 atom goes
+    assert sum(cut.p) == pytest.approx(1.0)
+    assert cut.prob(7 + 52) == pytest.approx(2e-6 / (1 - 5e-7), rel=1e-6)
+    assert 1 - pmf.cdf(cut.hi) <= 1e-6
+
+
+def test_truncate_leaves_a_pmf_without_a_thin_tail_as_it_is(lens):
+    pmf = Pmf.from_samples(np.arange(4000) % 90)
+    assert lens.truncate(pmf) == pmf
+    assert lens.truncate(Pmf.point(3)) == Pmf.point(3)
 
 
 def test_observe_pmf_returns_quickly_for_a_tiny_size():
@@ -362,7 +444,7 @@ def test_observe_pmf_returns_quickly_for_a_tiny_size():
 
 def test_observe_pmf_with_infinite_size_is_poisson(lens):
     pmf = lens.observe_pmf(30.0, math.inf, 1000)
-    assert pmf.prob(30) == pytest.approx(stats.poisson(30.0).pmf(30), rel=1e-9)
+    assert pmf.prob(30) == pytest.approx(stats.poisson(30.0).pmf(30), rel=1e-5)  # up to the renormalized tail
 
 
 @pytest.mark.parametrize("mean, dispersion", [(-1.0, 2.0), (math.nan, 2.0), (math.inf, 2.0), (5.0, 0.0)])

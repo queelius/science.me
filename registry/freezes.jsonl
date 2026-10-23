@@ -1,8 +1,8 @@
-{"kind":"freeze","name":"lens-admissions","closure_hash":"sha256:80e5f63fc3a6dabeab3bedb48a73a637cb51109a33f760abbd6147b0aa318fc2","frozen_at":"2026-10-23T17:01:40.479157Z"}
-{"kind":"freeze","name":"seir-core","closure_hash":"sha256:2984b076daee7bd0b72361408a9c6a2ea3b2a33bc2cb185dd9f130fc6ee06e9e","frozen_at":"2026-10-23T17:01:41.062011Z"}
-{"kind":"freeze","name":"hub-baseline","closure_hash":"sha256:deecccca9c5065e9470210314d2f291f37a949c416b30285575d74c792fba918","frozen_at":"2026-10-23T17:01:41.653096Z"}
-{"kind":"freeze","name":"flex-loglinear","closure_hash":"sha256:1b8ca16e31cec6608e4fb333a261819ce6ae8ebb68595ec2a45c6135b0cee6bd","frozen_at":"2026-10-23T17:01:42.234575Z"}
-{"kind":"freeze","name":"seir-x1-s1","closure_hash":"sha256:c96709c7d0fa87e9cd1d8a0c195a946f4d88a0720a7ebad15f0660c80ff5dce9","frozen_at":"2026-10-23T17:01:42.822043Z"}
-{"kind":"freeze","name":"seir-x1-s0","closure_hash":"sha256:a4cc5120d074cbc40161ec315da73ccee0af9a04a65dd7c8d79e18f42373f8d7","frozen_at":"2026-10-23T17:01:43.396841Z"}
-{"kind":"freeze","name":"seir-x0-s1","closure_hash":"sha256:ffee31d022b2ed70d2466c2561c4ecca55b5b854bcd320899c9ab7505fe7fede","frozen_at":"2026-10-23T17:01:43.956852Z"}
-{"kind":"freeze","name":"seir-x0-s0","closure_hash":"sha256:dfde1f5e3eb529b70a1ed76a4bed4aade93c6f001a3b53594cae39a959b68e6d","frozen_at":"2026-10-23T17:01:44.563952Z"}
+{"kind":"freeze","name":"lens-admissions","closure_hash":"sha256:0225579ce1834e82398db5753196572e653d37260fd59f1fdd44b1b08000f9c6","frozen_at":"2026-10-23T20:53:33.113133Z"}
+{"kind":"freeze","name":"seir-core","closure_hash":"sha256:2984b076daee7bd0b72361408a9c6a2ea3b2a33bc2cb185dd9f130fc6ee06e9e","frozen_at":"2026-10-23T20:53:33.611602Z"}
+{"kind":"freeze","name":"hub-baseline","closure_hash":"sha256:03484b90a2100c4d5cf9a15e780ea909b5d4a30fe1f3e0c4b4866d98ffd1f17e","frozen_at":"2026-10-23T20:53:34.109473Z"}
+{"kind":"freeze","name":"flex-loglinear","closure_hash":"sha256:e475946b8225daf660f1d146e0a883b7124d03ad78a9dfef00753b6d479daca3","frozen_at":"2026-10-23T20:53:34.642317Z"}
+{"kind":"freeze","name":"seir-x1-s1","closure_hash":"sha256:896750b5d033691b93d263a345dad3313e37fdabd8fcd105913d5ac116cc18de","frozen_at":"2026-10-23T20:53:35.163454Z"}
+{"kind":"freeze","name":"seir-x1-s0","closure_hash":"sha256:c50a99e377fec8913a89861562df2cfa655d36eac1e64b2e8825198b2382435a","frozen_at":"2026-10-23T20:53:35.680370Z"}
+{"kind":"freeze","name":"seir-x0-s1","closure_hash":"sha256:c5bf0e5a3b2f595c8a9ec8e979dcda0010f1ecb88f7b9e42927cceca7ca0326e","frozen_at":"2026-10-23T20:53:36.222682Z"}
+{"kind":"freeze","name":"seir-x0-s0","closure_hash":"sha256:de077e4f1f8d8067ee49dd6ca577ed6ac030bef5e7e14eb4ea6634744fff979f","frozen_at":"2026-10-23T20:53:36.779078Z"}
