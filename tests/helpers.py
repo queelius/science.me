@@ -1,11 +1,13 @@
 """Shared test builders; import with `from helpers import ...`."""
 
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from scienceme.archive import Archive
 from scienceme.manifest import ProgramManifest
 from scienceme.mission import Mission
-from scienceme.model import Isolation, StreamKind, StreamSpec
+from scienceme.model import Capture, Isolation, Row, StreamKind, StreamSpec, Vintage
 from scienceme.workspace import Workspace
 
 T0 = datetime(2026, 10, 1, tzinfo=UTC)
@@ -69,3 +71,15 @@ def write_program(ws: Workspace, name: str, code: str, **fields) -> Path:
     (d / "program.py").write_text(code, encoding="utf-8")
     (d / "README.md").write_text("test program", encoding="utf-8")
     return d
+
+
+def publish(
+    ws: Workspace, spec: StreamSpec, issue: int, values: Mapping[tuple[str, int], float], when: datetime
+) -> Capture:
+    """Create the stream if needed, capture `issue` (rows keyed by (jurisdiction, week)) at `when`, return it."""
+    archive = Archive(ws)
+    archive.create_stream(spec)
+    rows = tuple(Row(jurisdiction=j, week=w, value=v) for (j, w), v in sorted(values.items()))
+    capture = Capture.make(Vintage(stream=spec.id, issue=issue, rows=rows), when, source="test")
+    archive.add(capture)
+    return capture
