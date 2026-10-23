@@ -17,7 +17,7 @@ from scienceme.gain import (
     rank_wanted,
     save_ranking,
 )
-from scienceme.manifest import InterfaceVar
+from scienceme.manifest import InterfaceVar, ProgramManifest
 from scienceme.mission import Candidate, Claim, MissionError, WantedItem, append_wanted
 from scienceme.model import Intervention, Isolation, Target, TargetFilter, Timing
 from scienceme.pmf import Pmf, PmfError
@@ -37,6 +37,13 @@ HISTORY = (
 )
 
 
+UNIFORM_01 = "from scienceme.pmf import Pmf\ndef predict(ctx, target):\n    return Pmf.uniform(0, 1)\n"
+ARM_HISTORY = (
+    "from scienceme.sdk import Pmf\n"
+    "def predict(ctx, target):\n    return Pmf.point(len(ctx.view.history('w/adm/old')))\n"
+)
+
+
 def point_code(value: int) -> str:
     return f"from scienceme.pmf import Pmf\ndef predict(ctx, target):\n    return Pmf.point({value})\n"
 
@@ -44,6 +51,16 @@ def point_code(value: int) -> str:
 def entropy2(w: float) -> float:
     """Entropy (nats) of a coin with probability `w`."""
     return -w * math.log(w) - (1 - w) * math.log(1 - w)
+
+
+def asymmetric_gain(w_asserts: float) -> float:
+    """Gain of point(0) against uniform{0,1} with weights (w_asserts, 1 - w_asserts), from the formula.
+
+    Unlike two disjoint point masses it depends on which side carries which weight.
+    """
+    p0 = w_asserts + (1 - w_asserts) / 2
+    p1 = (1 - w_asserts) / 2
+    return -(p0 * math.log(p0) + p1 * math.log(p1)) - (1 - w_asserts) * math.log(2)
 
 
 def frozen(ws, name, code=CONST, when=at(0), **fields) -> str:
@@ -288,7 +305,16 @@ def test_a_program_modified_after_freezing_is_failed_not_raised(world):
     assert item.gain == 0.0
 
 
-def test_an_import_modified_after_freezing_fails_its_importer(world):
+def test_a_manifest_edited_after_freezing_fails_instead_of_vanishing(world):
+    h_lo, h_hi = supporter(world, "lo", 0), supporter(world, "hi", 10)
+    edited = ProgramManifest(name="hi", author_lineage="test")  # no longer declares the interface
+    (world.programs / "hi" / "program.json").write_text(edited.model_dump_json(), encoding="utf-8")
+    want(world)
+    [item] = rank(world)
+    assert item.failed == (h_hi,) and item.supporting == (h_lo,)
+
+
+def test_an_import_modified_after_freezing_fails_with_its_importer(world):
     write_program(world, "lens", point_code(1), library=True)
     lens = Registry(world).freeze("lens", at(0)).closure_hash
     h_user = frozen(world, "user", point_code(2), interface=(SCHOOLS,), imports={"lens": lens})
@@ -296,7 +322,8 @@ def test_an_import_modified_after_freezing_fails_its_importer(world):
     (world.programs / "lens" / "program.py").write_text(point_code(5), encoding="utf-8")
     want(world)
     [item] = rank(world)
-    assert item.failed == (h_user,) and len(item.supporting) == 1
+    # the edited library cannot be verified any more, and nor can the program that imports it
+    assert item.failed == tuple(sorted([lens, h_user])) and len(item.supporting) == 1
 
 
 def test_a_program_with_an_unreadable_manifest_is_failed(world):
@@ -341,13 +368,13 @@ def test_the_view_is_cut_at_now(ws):
     assert item.gain == 0.0
 
 
-def test_the_mission_streams_the_view_is_built_from_include_existing_arms(world):
+def test_the_view_includes_the_arms_of_the_mission_streams(world):
     publish(world, arm(id="w/adm/old", start=0), 1, {("A", 0): 1.0}, at(1))
-    supporter(world, "lo", 0)
-    supporter(world, "hi", 10)
+    frozen(world, "sees-arm", ARM_HISTORY, interface=(SCHOOLS,))  # forecasts how many vintages the old arm shows
+    supporter(world, "blind", 0)
     want(world)
     [item] = rank(world)
-    assert item.gain == pytest.approx(2 * math.log(2))
+    assert item.gain == pytest.approx(2 * math.log(2))  # 1 against 0; with the arm missing it would be 0 against 0
 
 
 def test_items_sort_by_priority_descending_then_id(world):
@@ -412,12 +439,47 @@ def test_targeted_gain_uses_the_pairs_two_program_weights(world):
     assert item.priority == pytest.approx((item.gain + 3.0 * 2 * per_target) / 2.0)
 
 
-def test_a_pair_that_favors_denial_weighs_the_other_way(world):
+def test_disjoint_forecasts_are_indifferent_to_which_side_the_evidence_favors(world):
     h_yes, h_no = supporter(world, "yes", 0), supporter(world, "no", 10)
     want(world)
     asserted = rank(world, mission=school_mission(), claims=[standing("school", pair("school", h_yes, h_no, 4.0))])
     denied = rank(world, mission=school_mission(), claims=[standing("school", pair("school", h_yes, h_no, -4.0))])
     assert denied[0].targeted["school"] == pytest.approx(asserted[0].targeted["school"])  # entropy is symmetric
+
+
+@pytest.mark.parametrize("delta", [4.0, -4.0, 1.0, 0.0])
+def test_the_asserting_side_weighs_expit_of_delta_over_tau(world, delta):
+    h_yes = frozen(world, "yes", point_code(0), interface=(SCHOOLS,))  # the asserting side
+    h_no = frozen(world, "no", UNIFORM_01, interface=(SCHOOLS,))  # the denying side
+    want(world, horizons=(1,))
+    claims = [standing("school", pair("school", h_yes, h_no, delta))]
+    [item] = rank(world, mission=school_mission(), claims=claims)  # tau = 2
+    assert item.targeted["school"] == pytest.approx(asymmetric_gain(float(expit(delta / 2.0))))
+
+
+def test_the_asymmetric_pair_distinguishes_a_flipped_weight():
+    assert asymmetric_gain(float(expit(2.0))) == pytest.approx(0.1432, abs=1e-4)
+    assert asymmetric_gain(float(expit(-2.0))) == pytest.approx(0.0755, abs=1e-4)
+
+
+def test_targeted_counts_only_the_candidate_targets_in_the_claims_scope(world):
+    h_yes, h_no = supporter(world, "yes", 0), supporter(world, "no", 10)
+    want(world)  # targets at horizons 1 and 2
+    claims = [standing("school", pair("school", h_yes, h_no, 0.0))]
+    in_scope = Claim(id="school", statement="s", scope=TargetFilter(horizons=(1,)), weight=3.0)
+    [item] = rank(world, mission=make_mission(claims=(in_scope,)), claims=claims)
+    assert item.targeted == {"school": pytest.approx(math.log(2))}  # horizon 2 does not bear on the claim
+    assert item.gain == pytest.approx(2 * math.log(2))  # the item's own gain still covers both
+    assert item.priority == pytest.approx(item.gain + 3.0 * math.log(2))
+
+
+def test_a_claim_whose_scope_matches_no_candidate_target_is_targeted_at_zero(world):
+    h_yes, h_no = supporter(world, "yes", 0), supporter(world, "no", 10)
+    want(world)
+    claims = [standing("school", pair("school", h_yes, h_no, 0.0))]
+    elsewhere = Claim(id="school", statement="s", scope=TargetFilter(jurisdictions=("B",)), weight=3.0)
+    [item] = rank(world, mission=make_mission(claims=(elsewhere,)), claims=claims)
+    assert item.targeted == {"school": 0.0} and item.priority == pytest.approx(item.gain)
 
 
 def test_a_pair_with_no_evidence_is_the_fair_coin(world):

@@ -52,7 +52,7 @@ class WantedItem(Frozen):
     id: str
     proposed_by: str
     candidate: Candidate
-    cost: float = 1.0
+    cost: float = Field(1.0, gt=0, allow_inf_nan=False)
     fulfiller: str = "custodian"
 
 

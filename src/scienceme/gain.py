@@ -9,8 +9,9 @@ between "which program is right" and the observed count, `H(mixture) - sum w_m H
 only over the programs whose declared interface supports the intervention, using what they actually
 predict for it.
 
-For each claim the same quantity is taken over each matched pair alone, weighted by how far the
-pair's evidence already tilts it, and added to the item's priority with the claim's weight.  Priority
+For each claim the same quantity is taken over each matched pair alone, on the targets in the claim's
+scope, weighted by how far the pair's evidence already tilts it, and added to the item's priority with the
+claim's weight.  Priority
 is that sum per unit cost.  Items nobody can forecast are still listed, with gain and priority 0.
 
 Rankings are saved write-once at `scores/<mission>/wanted/<as_of:05d>.json`.
@@ -28,7 +29,7 @@ from scipy.special import expit
 from scienceme.archive import Archive, ArchiveView
 from scienceme.claims import ClaimStanding, PairStanding
 from scienceme.manifest import ProgramManifest, in_scope, supports
-from scienceme.mission import Candidate, Mission, MissionError, WantedItem, load_wanted, mission_streams
+from scienceme.mission import Candidate, Claim, Mission, MissionError, WantedItem, load_wanted, mission_streams
 from scienceme.model import Frozen, Isolation
 from scienceme.pmf import Pmf, PmfError, mix
 from scienceme.predict import require_isolation
@@ -95,22 +96,42 @@ def _candidate_supported_by(manifest: ProgramManifest, candidate: Candidate) -> 
     )
 
 
-def _pair_gain(pair: PairStanding, pmfs: Mapping[str, list[Pmf]], tau: float) -> float:
-    """Gain over the candidate's targets of the pair alone, weighted `expit(delta / tau)` to the asserting side."""
+def _pair_gain(pair: PairStanding, pmfs: Mapping[str, list[Pmf]], tau: float, targets: Sequence[int]) -> float:
+    """Gain of the pair alone on the candidate targets at indices `targets`.
+
+    The asserting side weighs `expit(delta / tau)`: the more the evidence favors the assertion, the more
+    weight it carries.
+    """
     w_asserts = float(expit(pair.delta_nats / tau))
     return sum(
-        information_gain([a, d], [w_asserts, 1.0 - w_asserts])
-        for a, d in zip(pmfs[pair.asserts], pmfs[pair.denies])
+        information_gain([pmfs[pair.asserts][i], pmfs[pair.denies][i]], [w_asserts, 1.0 - w_asserts]) for i in targets
     )
 
 
-def _targeted(claims: Sequence[ClaimStanding], pmfs: Mapping[str, list[Pmf]], tau: float) -> dict[str, float]:
-    """Per claim with at least one pair whose members both forecast the candidate: the pairs' gains summed."""
+def _targeted(
+    standings: Sequence[ClaimStanding],
+    claims: Mapping[str, Claim],
+    candidate: Candidate,
+    pmfs: Mapping[str, list[Pmf]],
+    tau: float,
+) -> dict[str, float]:
+    """Per claim with at least one pair whose members both forecast the candidate: the pairs' gains summed.
+
+    Only the candidate targets in the claim's scope count, as only in-scope targets count toward its
+    standing.  A standing whose claim the mission does not list has no scope, so every target counts.
+    """
     targeted: dict[str, float] = {}
-    for standing in claims:
+    for standing in standings:
         pairs = [p for p in standing.pairs if p.asserts in pmfs and p.denies in pmfs]
-        if pairs:
-            targeted[standing.claim] = sum(_pair_gain(p, pmfs, tau) for p in pairs)
+        if not pairs:
+            continue
+        claim = claims.get(standing.claim)
+        in_scope_targets = [
+            i
+            for i, target in enumerate(candidate.targets)
+            if claim is None or claim.scope.matches(target, candidate.stream)
+        ]
+        targeted[standing.claim] = sum(_pair_gain(p, pmfs, tau, in_scope_targets) for p in pairs)
     return targeted
 
 
@@ -124,8 +145,8 @@ def _forecasts(
 ) -> tuple[dict[str, list[Pmf]], list[str]]:
     """Run each program that supports the item once; return (hash to its pmf per target, hashes that failed).
 
-    A program fails when its manifest cannot be read, its closure changed after the freeze, or any target
-    got no forecast.  WorkerError propagates.
+    A program fails when it is no longer what was frozen (its manifest cannot be verified or read, or its
+    closure changed), or any target got no forecast.  WorkerError propagates.
     """
     candidate = item.candidate
     pmfs: dict[str, list[Pmf]] = {}
@@ -161,6 +182,7 @@ def _rank_item(
 ) -> RankedItem:
     pmfs, failed = _forecasts(ws, mission, item, base.with_candidate(item.candidate.stream), programs, isolation)
     ok = list(pmfs)  # in closure-hash order
+    claim_by_id = {c.id: c for c in mission.claims}
     gain = 0.0
     targeted: dict[str, float] = {}
     if ok:
@@ -168,9 +190,10 @@ def _rank_item(
         gain = sum(
             information_gain([pmfs[p][t] for p in ok], [w[p] for p in ok]) for t in range(len(item.candidate.targets))
         )
-        targeted = _targeted(claims, pmfs, mission.tau)
-    claim_weight = {c.id: c.weight for c in mission.claims}  # a claim the mission does not list weighs nothing
-    priority = (gain + sum(claim_weight.get(c, 0.0) * v for c, v in targeted.items())) / item.cost
+        targeted = _targeted(claims, claim_by_id, item.candidate, pmfs, mission.tau)
+    # a claim the mission does not list weighs nothing
+    weighted = sum(claim_by_id[c].weight * v for c, v in targeted.items() if c in claim_by_id)
+    priority = (gain + weighted) / item.cost
     return RankedItem(
         item=item.id,
         supporting=tuple(ok),
@@ -194,7 +217,8 @@ def rank_wanted(
     """The mission's open wanted items, best first (priority descending, then id).
 
     An item is open when no archive stream `fulfills` it and its intervention starts after `as_of`.  The
-    programs that bear on an item are those active at `now`, not libraries, supporting the intervention and
+    programs that bear on an item are those active at `now` (each verified against its freeze first; one
+    that was modified is `failed`), not libraries, supporting the intervention and
     forecasting every candidate target.  Each runs once, in closure-hash order, under `isolation` on the
     archive as of `as_of` and published by `now`, plus the candidate arm.  A program that fails moves from
     `supporting` to `failed`; an item with no supporting program is listed with gain and priority 0.
@@ -219,6 +243,7 @@ def rank_wanted(
     for program in sorted(registry.freezes()):
         if registry.active(program, now):
             try:
+                registry.verify(program)  # a manifest edited after the freeze must not change what it supports (R8)
                 programs[program] = registry.manifest(program)
             except RegistryError:  # cannot tell what it supports; it is reported failed, as `run_origin` reports it
                 programs[program] = None

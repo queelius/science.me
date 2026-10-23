@@ -22,7 +22,7 @@ def arm_spec(id="w/adm~a", **kw):
     return count_spec(id=id, parent="w/adm", **kw)
 
 
-def wanted_item(id="a", arm=None) -> WantedItem:
+def wanted_item(id="a", arm=None, **kw) -> WantedItem:
     arm = arm or arm_spec()
     return WantedItem(
         id=id,
@@ -31,6 +31,7 @@ def wanted_item(id="a", arm=None) -> WantedItem:
             stream=arm,
             targets=(Target(stream=arm.id, jurisdiction="A", reference_week=3, horizon=0),),
         ),
+        **kw,
     )
 
 
@@ -161,6 +162,13 @@ def test_wanted_lists_are_per_mission(ws):
 def test_wanted_item_defaults():
     item = wanted_item()
     assert (item.cost, item.fulfiller) == (1.0, "custodian")
+
+
+def test_wanted_item_cost_must_be_a_positive_finite_number():
+    assert wanted_item(cost=0.25).cost == 0.25
+    for cost in (0.0, -1.0, float("inf"), float("nan")):
+        with pytest.raises(ValidationError):
+            wanted_item(cost=cost)
 
 
 def test_candidate_must_be_an_arm_with_targets_on_its_stream():
