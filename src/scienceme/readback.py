@@ -9,6 +9,7 @@ second reading.  The packet handed to the reader must therefore be blind.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Sequence
 from enum import StrEnum
@@ -19,19 +20,26 @@ from scienceme.manifest import MANIFEST_FILE, READBACK_FILE, ProgramManifest, Ta
 from scienceme.mission import Claim
 from scienceme.model import Frozen
 from scienceme.registry import Registry
+from scienceme.worker_entry import program_dirname
 from scienceme.workspace import Workspace, read_model
 
-README_FILE = "README.md"
-# The manifest fields in which the author says what the program claims; the reader must not see them.
-_AUTHOR_CLAIMS = frozenset({"tags", "pairs", "interface"})
+_README_STEM = "readme"
+_LABEL_HEX = 12
+# The only manifest fields the reader sees.  An allowlist, so a field added to the manifest later (a name, a
+# stance, a note) stays hidden until someone decides the reader should see it.
+_SHOWN_MANIFEST_FIELDS = frozenset({"entry", "library", "imports", "lens", "scope"})
 
 _PREAMBLE = """\
 # Read-back packet
 
 You are an independent reader. Below is the source of a forecasting program and of
 every program it imports, followed by the claims the mission wants evidence on. You
-are deliberately not told what the program's author says about it. Read the code
-and report what it literally assumes.
+are deliberately not told what the program's author says about it, and the programs
+are labelled by a digest of their content, not by name. Judge what the code does and
+report what it literally assumes. Disregard comments, docstrings and names as
+claims: they are what someone says the code does, not what it does.
+
+{subject}
 
 Answer with one JSON document that conforms to the schema at the end of this
 packet:
@@ -111,7 +119,7 @@ def flags(manifest: ProgramManifest, readback: Readback | None) -> frozenset[Rea
         raised.add(ReadbackFlag.SAME_LINEAGE)
     claims = manifest.tags.keys() | readback.inferred_tags.keys()
     if any(
-        manifest.tags.get(c, Tag.UNSPECIFIED) is not readback.inferred_tags.get(c, Tag.UNSPECIFIED) for c in claims
+        manifest.tags.get(c, Tag.UNSPECIFIED) != readback.inferred_tags.get(c, Tag.UNSPECIFIED) for c in claims
     ):
         raised.add(ReadbackFlag.TAG_MISMATCH)
     if set(readback.inferred_interface) != {v.variable for v in manifest.interface}:
@@ -129,36 +137,54 @@ def packet(ws: Workspace, program: str, claims: Sequence[Claim]) -> str:
 
     It holds the source of every program in the closure, imports first and `program` last, each file under a
     heading naming the program and the file, then the claims (id and statement) and the `Readback` schema.
-    `README.md` and `readback.json` are left out, and each `program.json` is shown without the fields in
-    which the author states what the program claims (`tags`, `pairs`, `interface`).  Every member of the
-    closure is verified first (RegistryError when one is modified, unfrozen or unreadable).  Deterministic.
+    Programs are labelled by the first 12 hex digits of their closure hash, never by name, since a name can
+    encode the author's stance.  README files (any case, any extension, any depth) and `readback.json` are
+    left out; each `program.json` is shown through an allowlist (`entry`, `library`, `imports`, `lens`,
+    `scope`), so the name, lineage, tags, pairs, interface and `supersedes` are hidden; a file that is not
+    UTF-8 text is shown as its size and sha256.  Every member of the closure is verified first
+    (RegistryError when one is modified, unfrozen or unreadable).  Deterministic.
     """
     registry = Registry(ws)
     members = registry.closure(program)
     for member in members:
         registry.verify(member)
-    sections = [_PREAMBLE, *(_program_section(registry, member) for member in members)]
+    subject = f"The program under review is {_label(program)}; the other programs are its imports."
+    sections = [_PREAMBLE.format(subject=subject), *(_program_section(registry, member) for member in members)]
     sections.append("## Claims\n\n" + "\n".join(f"- {c.id}: {c.statement}" for c in claims) + "\n")
     schema = json.dumps(Readback.model_json_schema(), sort_keys=True, indent=2)
     sections.append("## Readback schema\n\n" + _fenced(schema))
     return "\n".join(sections)
 
 
+def _label(closure_hash: str) -> str:
+    """The neutral, content-derived label of a program: the first 12 hex digits of its closure hash."""
+    return program_dirname(closure_hash)[:_LABEL_HEX]
+
+
 def _program_section(registry: Registry, closure_hash: str) -> str:
-    """One program's name and its files (see `packet`), as text."""
+    """One program's files (see `packet`), as text under its label."""
     program_dir = registry.program_dir(closure_hash)
     manifest = registry.manifest(closure_hash)
-    name = manifest.name
-    parts = [f"## Program {name}\n"]
+    label = _label(closure_hash)
+    parts = [f"## Program {label}\n"]
     for rel in program_files(program_dir):
-        if rel.name == README_FILE:
+        if Path(rel.name).stem.lower() == _README_STEM:
             continue
         if rel == Path(MANIFEST_FILE):
-            content = manifest.model_dump_json(exclude=_AUTHOR_CLAIMS, indent=2)
+            body = _fenced(manifest.model_dump_json(include=_SHOWN_MANIFEST_FIELDS, indent=2))
         else:
-            content = (program_dir / rel).read_text(encoding="utf-8", errors="replace")
-        parts.append(f"### {name}/{rel.as_posix()}\n{_fenced(content)}")
+            body = _file_body(program_dir / rel)
+        parts.append(f"### {label}/{rel.as_posix()}\n{body}")
     return "\n".join(parts)
+
+
+def _file_body(path: Path) -> str:
+    """The file's text in a code fence, or one line with its size and sha256 when it is not UTF-8 text."""
+    data = path.read_bytes()
+    try:
+        return _fenced(data.decode("utf-8"))
+    except UnicodeDecodeError:
+        return f"(binary file, {len(data)} bytes, sha256 {hashlib.sha256(data).hexdigest()})\n"
 
 
 def _fenced(text: str) -> str:

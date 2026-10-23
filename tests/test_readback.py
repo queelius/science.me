@@ -1,3 +1,4 @@
+import hashlib
 import json
 
 import pytest
@@ -34,6 +35,11 @@ def readback(**overrides) -> Readback:
     return Readback(**{**fields, **overrides})
 
 
+def label(closure_hash: str) -> str:
+    """The label a packet gives a program: the first 12 hex digits of its closure hash."""
+    return closure_hash.removeprefix("sha256:")[:12]
+
+
 def manifest(**overrides) -> ProgramManifest:
     fields = dict(name="p", author_lineage="anthropic", tags={"school": Tag.ASSERTS}, interface=(SCHOOLS,))
     return ProgramManifest(**{**fields, **overrides})
@@ -54,37 +60,75 @@ def test_packet_hides_the_author_claims(ws):
     assert "SECRET-README" not in text and "schools_closed" not in text and '"tags"' not in text
 
 
-def test_packet_hides_tags_pairs_and_interface_but_shows_the_rest_of_the_manifest(ws):
-    partner = write_program(ws, "partner", CONST, tags={"PARTNER-CLAIM": Tag.DENIES})
-    partner_hash = Registry(ws).freeze("partner", at(0)).closure_hash
+def test_packet_shows_only_the_allowlisted_manifest_fields(ws):
+    partner = write_program(ws, "seir-x0-s0", CONST, tags={"PARTNER-CLAIM": Tag.DENIES})
+    partner_hash = Registry(ws).freeze("seir-x0-s0", at(0)).closure_hash
     d = write_program(
         ws,
-        "p",
+        "seir-x1-s1",
         CONST,
         tags={"PARTNER-CLAIM": Tag.ASSERTS},
         pairs=(PairDecl(claim="PARTNER-CLAIM", partner=partner_hash),),
         interface=(SCHOOLS,),
+        supersedes=partner_hash,
     )
-    h = Registry(ws).freeze("p", at(1)).closure_hash
+    h = Registry(ws).freeze("seir-x1-s1", at(1)).closure_hash
     text = packet(ws, h, [CLAIM])
     assert partner.is_dir() and d.is_dir()
-    for hidden in ("PARTNER-CLAIM", "schools_closed", partner_hash, '"pairs"', '"interface"', '"tags"'):
+    for hidden in ("PARTNER-CLAIM", "schools_closed", partner_hash, "seir-x", '"pairs"', '"interface"', '"tags"'):
         assert hidden not in text
-    shown = json.loads(_manifest_json(text, "p"))
+    for hidden_key in ('"name"', '"supersedes"'):
+        assert hidden_key not in text
+    shown = json.loads(_manifest_json(text, label(h)))
     assert shown == {
-        "name": "p",
-        "author_lineage": "test",
         "entry": "program.py",
         "library": False,
         "imports": {},
         "lens": None,
         "scope": TargetFilter().model_dump(mode="json"),
-        "supersedes": None,
     }
 
 
+def test_packet_hides_the_lineage_of_the_author(ws):
+    d = write_program(ws, "p", CONST)
+    manifest_file = d / "program.json"
+    manifest_file.write_text(
+        ProgramManifest(name="p", author_lineage="LINEAGE-MARKER").model_dump_json(), encoding="utf-8"
+    )
+    h = Registry(ws).freeze("p", at(0)).closure_hash
+    assert "LINEAGE-MARKER" not in packet(ws, h, [CLAIM])
+
+
+def test_packet_labels_programs_by_a_digest_and_never_by_name(ws):
+    write_program(ws, "seir-x0-s1-lib", CONST + "# LIB\n")
+    lib = Registry(ws).freeze("seir-x0-s1-lib", at(0)).closure_hash
+    write_program(ws, "seir-x1-s0", CONST + "# TOP\n", imports={"core": lib})
+    h = Registry(ws).freeze("seir-x1-s0", at(1)).closure_hash
+
+    text = packet(ws, h, [CLAIM])
+
+    assert "seir" not in text and "x1-s0" not in text
+    headings = [line for line in text.splitlines() if line.startswith("## ")]
+    assert headings[:2] == [f"## Program {label(lib)}", f"## Program {label(h)}"]
+    assert len({label(lib), label(h)}) == 2
+
+
+def test_the_preamble_names_the_program_under_review_and_tells_the_reader_to_judge_the_code(ws):
+    write_program(ws, "lib", CONST)
+    lib = Registry(ws).freeze("lib", at(0)).closure_hash
+    write_program(ws, "p", CONST, imports={"core": lib})
+    h = Registry(ws).freeze("p", at(1)).closure_hash
+
+    text = packet(ws, h, [CLAIM])
+
+    preamble = text.split("## Program ", 1)[0]
+    assert f"The program under review is {label(h)}; the other programs are its imports." in preamble
+    assert label(lib) not in preamble
+    assert "Disregard comments, docstrings and names as claims" in " ".join(preamble.split())
+
+
 def _manifest_json(text: str, program: str) -> str:
-    """The body of the `program.json` section of `program` in a packet."""
+    """The body of the `program.json` section of the program labelled `program` in a packet."""
     heading = f"### {program}/program.json\n"
     body = text.split(heading, 1)[1]
     fence = body.split("\n", 1)[0]
@@ -105,11 +149,11 @@ def test_packet_lists_imports_first_then_the_program_with_files_sorted_by_path(w
 
     headings = [line for line in text.splitlines() if line.startswith("### ")]
     assert headings == [
-        "### lib/program.json",
-        "### lib/program.py",
-        "### lib/sub/helper.py",
-        "### p/program.json",
-        "### p/program.py",
+        f"### {label(lib)}/program.json",
+        f"### {label(lib)}/program.py",
+        f"### {label(lib)}/sub/helper.py",
+        f"### {label(h)}/program.json",
+        f"### {label(h)}/program.py",
     ]
     assert text.index("LIB-MARKER") < text.index("HELPER-MARKER") < text.index("PROGRAM-MARKER")
 
@@ -153,11 +197,9 @@ def test_packet_is_deterministic(ws):
     assert packet(ws, h, [CLAIM]) == packet(ws, h, [CLAIM])
 
 
-def test_packet_leaves_out_readme_at_any_depth_readback_json_and_pycache(ws):
+def test_packet_leaves_out_readback_json_and_pycache(ws):
     d = write_program(ws, "p", CONST)
-    (d / "README.md").write_text("TOP-README")
     (d / "sub").mkdir()
-    (d / "sub" / "README.md").write_text("NESTED-README")
     (d / "sub" / "mod.py").write_text("# MOD\n")
     (d / "__pycache__").mkdir()
     (d / "__pycache__" / "program.cpython-313.pyc").write_text("PYCACHE")
@@ -166,9 +208,52 @@ def test_packet_leaves_out_readme_at_any_depth_readback_json_and_pycache(ws):
 
     text = packet(ws, h, [CLAIM])
 
-    assert "### p/sub/mod.py" in text
-    for absent in ("TOP-README", "NESTED-README", "PYCACHE", "readback.json", '"author_agent": "codex"'):
+    assert f"### {label(h)}/sub/mod.py" in text
+    for absent in ("PYCACHE", "readback.json", '"author_agent": "codex"'):
         assert absent not in text
+
+
+@pytest.mark.parametrize(
+    "name", ["README.md", "readme.md", "Readme.TXT", "README", "README.rst", "sub/README.md", "sub/deeper/readme.rst"]
+)
+def test_packet_leaves_out_readme_files_in_any_case_extension_and_depth(ws, name):
+    d = write_program(ws, "p", CONST)
+    path = d / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("SECRET-README")
+    h = Registry(ws).freeze("p", at(0)).closure_hash
+
+    text = packet(ws, h, [CLAIM])
+
+    assert "SECRET-README" not in text and f"{label(h)}/{name}" not in text
+
+
+@pytest.mark.parametrize(
+    "name", ["readme_helper.py", "notreadme.md", "docs.md", "sub/readmes.txt", "README.d/notes.md"]
+)
+def test_packet_shows_files_that_only_resemble_a_readme(ws, name):
+    d = write_program(ws, "p", CONST)
+    path = d / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("VISIBLE-FILE")
+    h = Registry(ws).freeze("p", at(0)).closure_hash
+
+    text = packet(ws, h, [CLAIM])
+
+    assert "VISIBLE-FILE" in text and f"### {label(h)}/{name}\n" in text
+
+
+def test_packet_shows_a_file_that_is_not_utf8_text_as_its_size_and_digest(ws):
+    d = write_program(ws, "p", CONST)
+    blob = b"\xff\xfe\x00BIN\x80"
+    (d / "weights.bin").write_bytes(blob)
+    h = Registry(ws).freeze("p", at(0)).closure_hash
+
+    text = packet(ws, h, [CLAIM])
+
+    digest = hashlib.sha256(blob).hexdigest()
+    assert f"### {label(h)}/weights.bin\n(binary file, {len(blob)} bytes, sha256 {digest})\n" in text
+    assert "\ufffd" not in text and "\x00" not in text and "BIN" not in text
 
 
 def test_packet_survives_code_that_contains_a_markdown_fence(ws):
@@ -177,7 +262,7 @@ def test_packet_survives_code_that_contains_a_markdown_fence(ws):
 
     text = packet(ws, h, [CLAIM])
 
-    start = text.index("### p/program.py\n")
+    start = text.index(f"### {label(h)}/program.py\n")
     fence = text[start:].split("\n", 2)[1]
     assert set(fence) == {"`"} and len(fence) > 3
     body = text[start:].split("\n", 2)[2]
