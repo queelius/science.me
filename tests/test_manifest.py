@@ -3,6 +3,7 @@ from helpers import CONST, count_spec, covariate_spec, write_program
 from pydantic import ValidationError
 
 from scienceme.manifest import (
+    ClosureError,
     InterfaceVar,
     PairDecl,
     PairError,
@@ -76,6 +77,33 @@ def test_hash_depends_on_content_not_on_directory_name_or_location(ws, tmp_path)
     for f in a.iterdir():
         (copy / f.name).write_bytes(f.read_bytes())
     assert closure_hash(copy) == closure_hash(a)
+
+
+def test_hash_rejects_a_symlinked_file(ws, tmp_path):
+    d = write_program(ws, "p", CONST)
+    outside = tmp_path / "shared.py"
+    outside.write_text("X = 1\n")
+    (d / "shared.py").symlink_to(outside)
+    with pytest.raises(ClosureError, match="shared.py"):
+        closure_hash(d)
+
+
+def test_hash_rejects_a_symlinked_directory(ws, tmp_path):
+    d = write_program(ws, "p", CONST)
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "util.py").write_text("X = 1\n")
+    (d / "lib").symlink_to(shared, target_is_directory=True)
+    with pytest.raises(ClosureError, match="lib"):
+        closure_hash(d)
+
+
+def test_hash_rejects_a_nested_or_dangling_symlink(ws, tmp_path):
+    d = write_program(ws, "p", CONST)
+    (d / "lib").mkdir()
+    (d / "lib" / "gone.py").symlink_to(tmp_path / "does-not-exist.py")
+    with pytest.raises(ClosureError, match="gone.py"):
+        closure_hash(d)
 
 
 def test_hash_of_a_missing_directory_is_an_error(tmp_path):

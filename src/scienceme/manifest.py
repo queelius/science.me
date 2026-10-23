@@ -68,6 +68,10 @@ class ProgramManifest(Frozen):
         return self
 
 
+class ClosureError(ValueError):
+    """Raised by `closure_hash` when a program directory cannot be hashed faithfully (it holds a symlink)."""
+
+
 class PairError(ValueError):
     """Raised by `validate_pair` when two programs are not a matched pair for a claim."""
 
@@ -82,12 +86,16 @@ def closure_hash(program_dir: Path) -> str:
 
     `readback.json` (at the top level; it is written after freezing) and
     anything under a `__pycache__` directory are not part of the program.
+    Raises ClosureError on any symlink, since a link's target could change
+    (or, for a directory, be skipped) without the hash noticing.
     """
     if not program_dir.is_dir():
         raise FileNotFoundError(f"not a program directory: {program_dir}")
     entries = []
     for path in program_dir.rglob("*"):
         rel = path.relative_to(program_dir)
+        if path.is_symlink():
+            raise ClosureError(f"{program_dir.name}: symlinks are not allowed in a program, found {rel.as_posix()}")
         if not path.is_file() or rel == Path(_READBACK_FILE) or _PYCACHE in rel.parts:
             continue
         entries.append([rel.as_posix(), hashlib.sha256(path.read_bytes()).hexdigest()])
