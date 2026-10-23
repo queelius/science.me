@@ -1,19 +1,29 @@
 """Shared test builders; import with `from helpers import ...`."""
 
-from collections.abc import Mapping
+import shutil
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from scienceme.archive import Archive
-from scienceme.manifest import ProgramManifest
+from scienceme.archive import Archive, ArchiveView
+from scienceme.manifest import ProgramManifest, closure_hash, load_manifest
 from scienceme.mission import Mission
-from scienceme.model import Capture, Isolation, Row, StreamKind, StreamSpec, Vintage
+from scienceme.model import Capture, Isolation, Row, StreamKind, StreamSpec, Target, Vintage
+from scienceme.worker_entry import WorkOrder, program_dirname
 from scienceme.workspace import Workspace
 
 T0 = datetime(2026, 10, 1, tzinfo=UTC)
 
 # A program that forecasts the constant 7 for every target.
 CONST = "from scienceme.pmf import Pmf\ndef predict(ctx, target):\n    return Pmf.point(7)\n"
+
+# A program that forecasts its target's horizon, except that it raises for jurisdiction B.
+PER_TARGET = (
+    "from scienceme.sdk import Pmf\n"
+    "def predict(ctx, target):\n"
+    "    if target.jurisdiction == 'B':\n        raise RuntimeError('boom')\n"
+    "    return Pmf.point(target.horizon)\n"
+)
 
 
 def at(hours: float) -> datetime:
@@ -83,3 +93,27 @@ def publish(
     capture = Capture.make(Vintage(stream=spec.id, issue=issue, rows=rows), when, source="test")
     archive.add(capture)
     return capture
+
+
+def sandbox(ws: Workspace, tmp_path: Path, *names: str) -> Path:
+    """Copy each named program into `<tmp_path>/work/programs/<hex>/`, as the container sees them; return `work`."""
+    work = tmp_path / "work"
+    for name in names:
+        source = ws.programs / name
+        target = work / "programs" / program_dirname(closure_hash(source))
+        shutil.copytree(source, target, ignore=shutil.ignore_patterns("__pycache__"))
+    return work
+
+
+def order(ws: Workspace, name: str, view: ArchiveView, targets: Iterable[Target]) -> WorkOrder:
+    """A WorkOrder for program `name`, with the manifest of it and of every import found in `ws.programs`."""
+    by_hash = {closure_hash(d): d for d in ws.programs.iterdir() if d.is_dir()}
+    program = closure_hash(ws.programs / name)
+    manifests: dict[str, ProgramManifest] = {}
+    pending = [program]
+    while pending:
+        h = pending.pop()
+        if h not in manifests and h in by_hash:
+            manifests[h] = load_manifest(by_hash[h])
+            pending.extend(manifests[h].imports.values())
+    return WorkOrder(program=program, manifests=manifests, view=view, targets=tuple(targets))
