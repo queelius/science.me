@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from scipy import stats
+from scipy.linalg import solve_triangular
 from scipy.optimize import least_squares
 
 from scienceme.sdk import Context, Pmf, Target
@@ -54,6 +55,13 @@ TERM_ROLE = "school-term"
 # Parameter draws (a power of 2, for the Sobol points) and the fixed scrambling of their sequence.
 _DRAWS = 256
 _QMC_SEED = 0
+# Under Poisson noise a residual weighted by sqrt(1 + count) has variance about 1: no fit is taken as
+# closer than that, so an exact fit (no residual at all) still has a spread.
+_POISSON_RESIDUAL_VARIANCE = 1.0
+# Fewer draws inside the box than this cannot describe the parameters' spread; the forecast is the fit alone.
+_MIN_DRAWS = 32
+# A ridge of this share of the mean diagonal restores a precision that rounding left not positive definite.
+_RIDGE = 1e-8
 
 # Fitting works on theta = (log beta0, a, b, s0, log i0, log scale), where the seasonal term
 # amplitude * cos(2 pi (week - peak_week) / 52) is written a * cos(2 pi week / 52) + b * sin(2 pi week / 52):
@@ -228,15 +236,35 @@ def _draws(best, size: int) -> np.ndarray:
 
     `best` is the least-squares result over `size` residuals.  The approximation is
     `N(theta_hat, (J'J / sigma^2 + prior precision)^-1)`, with `sigma^2` the residual variance on the
-    parameters' degrees of freedom (at least one); the prior keeps a direction the data cannot determine
-    from an unbounded variance.  The fitted theta is the first draw.
+    parameters' degrees of freedom (at least one), never below `_POISSON_RESIDUAL_VARIANCE`; the prior keeps
+    a direction the data cannot determine from an unbounded variance.  Draws are `theta_hat + L^-T z` for
+    the Cholesky factor `L` of the precision, so the precision is never inverted.  The fitted theta is the
+    first draw, and the only one when fewer than `_MIN_DRAWS` fall inside the box or the precision cannot
+    be factored at all: the forecast then has the lens's observation noise alone.
     """
-    sigma2 = max(2.0 * best.cost / max(size - best.x.size, 1), np.finfo(float).tiny)
-    precision = best.jac.T @ best.jac / sigma2 + _PRIOR_PRECISION
-    root = np.linalg.cholesky(np.linalg.inv(precision))
+    fitted = best.x[None, :]
+    sigma2 = max(2.0 * best.cost / max(size - best.x.size, 1), _POISSON_RESIDUAL_VARIANCE)
+    root = _cholesky(best.jac.T @ best.jac / sigma2 + _PRIOR_PRECISION)
+    if root is None:
+        return fitted
     sobol = stats.qmc.Sobol(d=best.x.size, scramble=True, seed=_QMC_SEED).random(_DRAWS)
-    draws = best.x + np.vstack([np.zeros(best.x.size), stats.norm.ppf(sobol)]) @ root.T
-    return draws[np.all((draws >= _LOWER) & (draws <= _UPPER), axis=1)]
+    z = np.vstack([np.zeros(best.x.size), stats.norm.ppf(sobol)])
+    draws = best.x + solve_triangular(root, z.T, lower=True, trans="T").T
+    inside = draws[np.all((draws >= _LOWER) & (draws <= _UPPER), axis=1)]
+    return inside if len(inside) >= _MIN_DRAWS else fitted
+
+
+def _cholesky(precision: np.ndarray) -> np.ndarray | None:
+    """The lower Cholesky factor of `precision`, with a `_RIDGE` added if rounding left it not positive
+    definite; None when it is not finite or even the ridge does not help."""
+    if not np.all(np.isfinite(precision)):
+        return None
+    for ridge in (0.0, _RIDGE * float(np.mean(np.diag(precision)))):
+        try:
+            return np.linalg.cholesky(precision + ridge * np.eye(len(precision)))
+        except np.linalg.LinAlgError:
+            continue
+    return None
 
 
 def _covariate(view: ArchiveView, world: str, role: str, jurisdiction: str) -> dict[int, float]:

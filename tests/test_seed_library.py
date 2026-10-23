@@ -8,8 +8,10 @@ and rounded, so recent weeks are revised upward.  A `covariate-x` stream (flat a
 elsewhere) is released 4 weeks ahead and a `school-term` stream is in session except in weeks 10 and 11.
 """
 
+import json
 import math
 import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -273,10 +275,47 @@ def coverage(ws, program: str, seeds: range) -> float:
     return inside / (len(seeds) * len(targets))
 
 
-def test_seed_intervals_are_calibrated_across_epidemics(seed_ws):
+def test_seed_interval_coverage_does_not_regress(seed_ws):
     measured = coverage(seed_ws, "seir-x1-s1", COVERAGE_SEEDS)
-    # measured 0.600: the model overfits 16 noisy weeks; pins today's behavior against regressions, not good calibration
+    # measured 0.584: the model overfits 16 noisy weeks; pins today's behavior against regressions, not good calibration
     assert measured >= 0.55, f"pooled 90% interval coverage {measured:.3f}"
+
+
+def complete_view(series: list[float], jurisdiction: str = "A") -> ArchiveView:
+    """An admissions-only view as of the issue after `series`, every week reported complete in every issue."""
+    as_of = len(series)
+    vintages = tuple(
+        Vintage(
+            stream=ADM,
+            issue=issue,
+            rows=tuple(Row(jurisdiction=jurisdiction, week=w, value=series[w]) for w in range(issue)),
+        )
+        for issue in range(1, as_of + 1)
+    )
+    return ArchiveView(as_of=as_of, specs={ADM: SPECS[ADM]}, vintages={ADM: vintages})
+
+
+def exact_series(weeks: int) -> list[float]:
+    core = load_library("seir-core")
+    params, mech = core.Params(*TRUTH["A"]), core.Mechanisms(covariate_x=0.2, school=0.2)
+    return [float(v) for v in core.expected(params, range(weeks), {}, {}, mech, (), "A")]
+
+
+@pytest.mark.parametrize(
+    "series",
+    [
+        pytest.param(exact_series(16), id="noise-free-16-weeks"),
+        pytest.param(exact_series(3), id="noise-free-3-weeks"),
+        pytest.param([float(round(v)) for v in exact_series(3)], id="rounded-3-weeks"),
+        pytest.param([0.0] * 14 + [1.0, 2.0], id="too-few-draws-in-bounds"),
+    ],
+)
+def test_seir_forecasts_exact_and_short_series(seed_ws, series):
+    # an exact fit has no residual variance and a short one too little data; neither may fail a target
+    view = complete_view(series)
+    targets = [Target(stream=ADM, jurisdiction="A", reference_week=len(series), horizon=h) for h in HORIZONS]
+    pmfs = forecast(seed_ws, "seir-x1-s1", view, targets)
+    assert all(pmf.within(0, SUPPORT_MAX) for pmf in pmfs)
 
 
 def test_one_origin_runs_in_under_30_seconds(origin):
@@ -303,6 +342,22 @@ def test_observe_pmf_cuts_the_negative_binomial_at_its_upper_tail(lens):
     pmf = lens.observe_pmf(200.0, 10.0, 10**6)
     assert pmf.hi == int(stats.nbinom(10.0, 10.0 / 210.0).ppf(1 - 1e-12))
     assert pmf.prob(200) == pytest.approx(stats.nbinom(10.0, 10.0 / 210.0).pmf(200), rel=1e-9)
+
+
+def test_observe_pmf_returns_quickly_for_a_tiny_size():
+    # scipy's nbinom.ppf stalls near this size; a subprocess makes a regression fail instead of hanging the suite
+    path = PROGRAMS / "lens-admissions" / "program.py"
+    code = (
+        "import json, sys, time, types\n"
+        f"path = {str(path)!r}\n"
+        "lens = types.ModuleType('lens'); sys.modules['lens'] = lens\n"
+        "exec(compile(open(path, encoding='utf-8').read(), path, 'exec'), lens.__dict__)\n"
+        "start = time.perf_counter(); pmf = lens.observe_pmf(460.0, 5.6e-12, 20000)\n"
+        "print(json.dumps({'seconds': time.perf_counter() - start, 'hi': pmf.hi}))\n"
+    )
+    done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60, check=True)
+    result = json.loads(done.stdout)
+    assert result["seconds"] < 1.0 and result["hi"] <= 20000
 
 
 def test_observe_pmf_with_infinite_size_is_poisson(lens):

@@ -4,7 +4,7 @@
   "entry": "program.py",
   "library": false,
   "imports": {
-    "core": "sha256:58c564c56024606cecab6bd67a71dd1c8c69122405c55e680f243c76fe93b291",
+    "core": "sha256:2984b076daee7bd0b72361408a9c6a2ea3b2a33bc2cb185dd9f130fc6ee06e9e",
     "lens": "sha256:80e5f63fc3a6dabeab3bedb48a73a637cb51109a33f760abbd6147b0aa318fc2"
   },
   "lens": "lens",
@@ -40,7 +40,7 @@
   "pairs": [
     {
       "claim": "school",
-      "partner": "sha256:88460016f1659999dd8346d870d8ef2e0d47f663abd9114bb174f10b1e28078f"
+      "partner": "sha256:c96709c7d0fa87e9cd1d8a0c195a946f4d88a0720a7ebad15f0660c80ff5dce9"
     }
   ],
   "supersedes": null

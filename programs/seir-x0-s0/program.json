@@ -4,7 +4,7 @@
   "entry": "program.py",
   "library": false,
   "imports": {
-    "core": "sha256:58c564c56024606cecab6bd67a71dd1c8c69122405c55e680f243c76fe93b291",
+    "core": "sha256:2984b076daee7bd0b72361408a9c6a2ea3b2a33bc2cb185dd9f130fc6ee06e9e",
     "lens": "sha256:80e5f63fc3a6dabeab3bedb48a73a637cb51109a33f760abbd6147b0aa318fc2"
   },
   "lens": "lens",
@@ -40,15 +40,15 @@
   "pairs": [
     {
       "claim": "covariate-x",
-      "partner": "sha256:3dcba46cdd154a488d55eec196b72c17c5c002426da5c419af91f93f690fe7bd"
+      "partner": "sha256:a4cc5120d074cbc40161ec315da73ccee0af9a04a65dd7c8d79e18f42373f8d7"
     },
     {
       "claim": "covariate-x-flat",
-      "partner": "sha256:3dcba46cdd154a488d55eec196b72c17c5c002426da5c419af91f93f690fe7bd"
+      "partner": "sha256:a4cc5120d074cbc40161ec315da73ccee0af9a04a65dd7c8d79e18f42373f8d7"
     },
     {
       "claim": "school",
-      "partner": "sha256:c9787c9cb90e8e48bc2b6d8c2642b615de3c9a9618054d6711f29998c713eec6"
+      "partner": "sha256:ffee31d022b2ed70d2466c2561c4ecca55b5b854bcd320899c9ab7505fe7fede"
     }
   ],
   "supersedes": null
