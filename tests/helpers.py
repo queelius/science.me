@@ -9,6 +9,7 @@ from scienceme.archive import Archive, ArchiveView
 from scienceme.manifest import ProgramManifest, closure_hash, load_manifest
 from scienceme.mission import Mission
 from scienceme.model import Capture, Isolation, Row, StreamKind, StreamSpec, Target, Vintage
+from scienceme.scoring import PointScore, ResolvedTarget
 from scienceme.worker_entry import WorkOrder, program_dirname
 from scienceme.workspace import Workspace
 
@@ -117,3 +118,13 @@ def order(ws: Workspace, name: str, view: ArchiveView, targets: Iterable[Target]
             manifests[h] = load_manifest(by_hash[h])
             pending.extend(manifests[h].imports.values())
     return WorkOrder(program=program, manifests=manifests, view=view, targets=tuple(targets))
+
+
+def rt(ref: int, ri: int, scores: Mapping[str, float], j: str = "A", h: int = 0) -> ResolvedTarget:
+    """A target of `w/adm` at reference week `ref`, horizon `h`, resolved by issue `ri`, scored with `scores` (log_p).
+
+    The cdfs are dummies (0 below, 1 at) and the realized value is 0.
+    """
+    target = Target(stream="w/adm", jurisdiction=j, reference_week=ref, horizon=h, resolution_lag=ri - ref - h)
+    points = {m: PointScore(log_p=v, cdf_below=0.0, cdf_at=1.0) for m, v in scores.items()}
+    return ResolvedTarget(target=target, realized=0, scores=points)
