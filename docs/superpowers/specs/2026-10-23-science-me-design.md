@@ -1,26 +1,22 @@
 # science.me (design document)
 
-**Version:** 0.2 (2026-10-23)
-**Status:** brainstorm output, pre-plan. The social layer (section 9) is deliberately open.
+**Version:** 0.3 (2026-10-23)
+**Status:** brainstorm output, pre-plan. The social layer (section 8) is deliberately open.
 **Authors:** Alexander Richard Towell (decisions), Claude (drafting; calls marked as such)
 
-**Decisions from the builder check (Alex, 2026-10-23):**
-
-1. Contributions come from Alex's existing agent loops, as on Prove2Me, through the harness. The pilot builds no orchestrator of its own.
-2. The pilot's captain may be an LLM, with the safeguards in 6.4.
-3. A year's wait for the first real resolution is unacceptable. The real stream is respiratory disease surveillance, which resolves weekly, and private synthetic worlds give feedback on demand (section 8). NHANES is deferred.
-
-Labels used throughout:
+Labels:
 
 - **Decided**: Alex said this in conversation. Treat as fixed.
-- **Call**: Claude's choice where a sensible builder needed one. Alex has not confirmed; overridable.
-- **Open**: nobody has decided. Section 9 and section 10 collect these.
+- **Call**: Claude's choice where a builder needed one. Alex has not confirmed; overridable.
+- **Open**: nobody has decided. Sections 8 and 9 collect these.
+
+Version 0.3 is a simplification pass over 0.2 (changelog, section 11). The philosophy (section 3) is unchanged. The machinery (section 4) was reduced to two kinds of thing people create, one scorer, and git.
 
 ---
 
 ## 0. In one paragraph
 
-science.me is a collaborative platform, in the mold of [Prove2Me](https://prove2.me), on which humans and AI agents jointly maintain an honest, machine-checked, self-correcting account of what the evidence currently supports, what each supported claim rests on, and what would overturn it; and, on the same machinery, propose new theories as programs, commit risky predictions ahead of data, and are scored when the data arrives. Prove2Me industrialized the *verification and composition* of mathematical proofs so that uncoordinated contributions accumulate instead of piling up. science.me does the same for empirical claims. The one thing science has that cannot be gamed is *time*: a prediction committed before the data existed. That is the platform's kernel.
+science.me is a collaborative platform, in the mold of [Prove2Me](https://prove2.me), on which humans and AI agents jointly maintain an honest, machine-checked, self-correcting account of what the evidence currently supports, what each supported claim rests on, and what would overturn it; and, on the same machinery, propose new theories as programs that predict data not yet collected, and are scored when it arrives. Prove2Me industrialized the *verification and composition* of mathematical proofs so that uncoordinated contributions accumulate instead of piling up. science.me does the same for empirical claims. The one thing science has that cannot be gamed is *time*: a program committed before the data existed. That is the platform's kernel, and in the pilot it is literally a git repository. Agentic intelligence is assumed as a first principle (Decided): agents do everything that requires judgment, and the design's job is to make each of their outputs checkable (section 5).
 
 ---
 
@@ -32,22 +28,13 @@ science.me is a collaborative platform, in the mold of [Prove2Me](https://prove2
 
 The long-run deliverable to a person: ask "what do we actually know about X, how strongly, and what would overturn it?" and get an answer with provenance. The literature answers "what has been asserted"; Wikipedia answers "what is the consensus"; neither answers *why, how well, on what assumptions*.
 
-The grand vision (Decided) is the discovery of novel theories of a data-generating process (DGP), expressed as programs, from samples of it. This document treats that as the same machine as the ledger, pointed forward (section 4.8, section 8.3).
+The grand vision (Decided) is the discovery of novel theories of a data-generating process, expressed as programs, from samples of it. The ledger and the discovery engine are the same machine; a discovery is a program that takes weight from the others (4.4).
 
 ### 1.2 What it is, and is not
 
-It **is**:
+It **is**: a repository of programs that predict streams of data, scored only on data that arrived after each program was committed, with a standing derived from those scores; and a set of captained missions that say which streams, which claims, and which tests matter.
 
-- a dependency graph of claims, theories, evidence, environments and commitments, with a standing (weight) on every node that is always provisional and always has a history;
-- a scoring rule that converts committed predictions into standing, mechanically;
-- a harness that lets any agent contribute an atomic unit of work (a *test*, section 5) without coordinating with anyone;
-- a set of *missions*, each with a captain (human in the long run; an LLM captain is allowed in the pilot, section 6.4), that bound what must be audited.
-
-It is **not**:
-
-- a replacement for the scientific community. The community already exists and is the open-ended collaboration of intelligences; what it lacks is a composition rule. science.me is the composition rule.
-- a way to extract new truths from static public data by volume. A fixed dataset holds bounded evidence for any fixed hypothesis, and re-analysis spends it. This was given up deliberately.
-- a laboratory. The platform cannot manufacture observations. It can say exactly which observation is worth making.
+It is **not**: a replacement for the scientific community (the community is the open-ended collaboration of intelligences; what it lacks is a composition rule, and this is the composition rule); a way to extract new truths from static public data by volume (a fixed dataset holds bounded evidence and re-analysis spends it; given up deliberately); or a laboratory (it cannot make observations; it can say which observation is worth making).
 
 ### 1.3 Relation to Prove2Me
 
@@ -55,456 +42,295 @@ Prove2Me (Chen, Marwaha, Lu, Yuen, Peng, arXiv 2608.28433) rests on four structu
 
 | Property | Prove2Me | science.me |
 |---|---|---|
-| Cheap, final checker | Lean 4 kernel; binary, never reversed | **None.** Replaced by: reproducibility of evidence items (mechanical), commitment timestamps (mechanical), and scoring arithmetic (mechanical). Everything else is revisable. |
-| Statement separate from proof | Immutable theorem, many proofs | Immutable claim/theory, many evidence items. Same. |
-| Composition preserves certainty | Property 1: parent proved iff children proved | **Does not hold.** Evidence composes by multiplication of e-values and mixing of theory weights; support can be withdrawn later. Composition is a truth-maintenance system, not a proof tree. |
-| Small fixed audit surface | Mission core: goal, definitions, milestones; blind read-back | Mission core: the preregistered claims, their falsification criteria, the environments' measurement models; blind read-back of what an analysis literally tests. Same idea. |
+| Cheap, final checker | Lean 4 kernel; binary, never reversed | **None.** Replaced by: git history for ordering, a pinned scorer for arithmetic, reproducibility for everything else. All revisable except the ordering. |
+| Statement separate from proof | Immutable theorem, many proofs | Immutable program, many scores over time. |
+| Composition preserves certainty | Parent proved iff children proved | **Does not hold.** Standings are recomputed from scratch whenever an input is superseded. Nothing propagates; everything is derived. |
+| Small fixed audit surface | Mission core; blind read-back | Mission README plus each program's read-back. Same idea. |
+| Where intelligence goes | agents write proofs; Lean checks | agents write programs, pick tests, assign blame; the scorer checks predictions, other lineages check text, humans check agenda (section 5) |
 
-What generalizes unchanged: statement/proof separation, immutability, atomization, the mission/captain/milestone structure, the discussion channel, credit for reuse, "point your agent at one URL".
-
-What is new: a scoring calculus in place of a kernel, environments as first-class objects, the commitment log, holdouts and synthetic worlds, and a non-monotone dependency graph.
+Carried over unchanged: statement/proof separation, immutability, atomization, missions with captains, the discussion channel, credit for reuse, "point your agent at one URL," a workspace repo that mirrors the server's layout. New: scoring on future data in place of a kernel, and git as the substrate.
 
 ---
 
 ## 2. Goals, non-goals, anti-goals
 
-**Goals**
+**Goals.** (1) Every standing is recomputable by anyone who clones the repo and runs the scorer. (2) A standing changes only because new data arrived or an input was superseded; never by fiat. (3) An agent with no context can write a program, commit it, and have it scored, without coordinating with anyone. (4) Human attention goes to mission READMEs, read-backs, and reading the standings. (5) The platform's own calibration is reported.
 
-1. Every standing on the platform is reproducible from recorded objects by anyone. No standing exists that cannot be recomputed.
-2. A claim's standing changes only because of new evidence, new commitments resolving, or a dependency's standing changing. Never by editorial fiat.
-3. An agent with no context can pick up an atomic task (section 5.6), complete it alone, and have it compose.
-4. Human attention is spent only on the mission core and on consuming the output.
-5. The platform's own promises are scored: its standing theories' outstanding predictions must resolve at a rate it reports.
+**Non-goals.** Settling realism (predictive adequacy on unobserved observables is the whole criterion). Replacing journals, registries, or the forecast hubs. Automating agenda-setting. A single scalar truth score per claim.
 
-**Non-goals**
-
-- Settling scientific realism. Predictive adequacy on *unobserved* observables is the whole criterion (section 3.1).
-- Replacing peer review, journals, or preregistration registries. Interoperate; don't compete.
-- Fully automating agenda-setting. Captains are human.
-- A single scalar "truth score" per claim. The map is primary; numbers are views of it.
-
-**Anti-goals** (would make it a failure even if it worked)
-
-- A correlation mountain: millions of verified rung-one associations that explain nothing.
-- An oracle: a standing nobody can trace to its evidence.
-- A manufactured-doubt engine: cheap, flawed falsifications drowning sound claims.
-- A monoculture: a million copies of one model agreeing with itself.
-- Goodhart: any metric optimized to the detriment of the thing it measures.
+**Anti-goals.** A correlation mountain. An oracle nobody can trace. A manufactured-doubt engine. A monoculture. Goodhart.
 
 ---
 
 ## 3. Philosophical commitments
 
-### 3.1 Predictive adequacy, out of distribution (Decided)
+Unchanged from 0.2 in substance; tightened.
 
-A theory is judged by how well it predicts observables, and it must predict observables *not yet observed*: future data, new regimes, new populations, interventions. Realism about unobservables is not settled and need not be (van Fraassen's constructive empiricism; by the invariance argument below, this is structural realism in practice, but nothing depends on calling it that).
-
-### 3.2 Falsifiability as the entry rule (Decided)
-
-A claim enters only if it states, in advance, what observation would count against it. This is the analogue of "must be a well-typed Lean statement": a cheap structural check.
-
-### 3.3 No claim is tested alone (Decided)
-
-Duhem–Quine. A failed prediction refutes a *set*: theory, auxiliaries, measurement model, data, code. Blame assignment is the central problem and the dependency graph is not optional. A falsification is itself a node with its own dependencies and can be overturned.
-
-### 3.4 Theories are generative programs (Decided)
-
-A theory precise enough to test is a program that generates observations (a sampler, or a density). Prediction is running it; evidence is how well real data scores under it; comparing theories is comparing predictive scores on shared observables. Code, including cleaning pipelines and checking code, is a theory in this sense and is under the same review.
-
-### 3.5 Theory quality is compression (Call, consistent with Decided items)
-
-A theory's prior weight is 2^(−|p|) in a shared reference language. Posterior weight ∝ 2^(−[|p| + codelength of data under p]), which is two-part MDL, which is Bayes with the Solomonoff prior. Two consequences:
-
-- **The reference language is the paradigm.** By the invariance theorem the language shifts all codelengths by a constant, but that constant dominates at finite data and encodes what counts as simple. A paradigm shift is a change of reference machine that makes a previously long theory short. The shared *definitions library* (section 5.7) is the reference machine and is itself a growing, contested object.
-- **Compression across environments recovers causal structure.** A non-causal model must be re-fitted per environment, so its code grows with each; a causal model shares mechanisms and parameterizes only what changed. Demanding OOD adequacy therefore forces invariant (causal) structure without any appeal to unobservables. Compression within one environment does not.
-
-### 3.6 Keep all consistent theories, weighted (Decided)
-
-Never select one theory; maintain a weighted mixture. Consistency with data is *comparative*, never absolute: "the data were improbable under H" means nothing alone (the p-value defect); "the data were 2^k times more probable under H′" means something. Falsification = a theory's weight has decayed to negligible *relative to the mixture*, which is reversible when rivals later fail.
-
-### 3.7 The only trusted kernel is time (Call)
-
-Science has no Lean kernel. What cannot be faked is the order of events: a hash of a prediction or analysis plan recorded before the data existed. The commitment log plus the arithmetic of scoring plus the reproducibility of evidence items constitute the trusted base. Every statistical method, including the scoring rule's own components, stays revisable above that base.
-
-### 3.8 Severity (Call)
-
-A passed test counts in proportion to how probably it would have failed had the claim been false (Mayo). Operationally: committed before the data, on an environment not used to build the theory, with a prediction the standing mixture did not already make. All three are provenance facts the platform can check.
-
-### 3.9 Messiness is functional (Decided)
-
-Normal science tolerates anomalies. A graph that retracts everything on one contradiction oscillates on every noisy result. Standings are graded and damped, never toggled.
-
-### 3.10 Interventions are program surgery (Call)
-
-If a theory is written as a **structural** program (each variable assigned from its parents and its own exogenous noise, in topological order), then `do(X = x)` is a mechanical transformation: replace the assignment of X with `X = x` and leave every other line unchanged (Pearl's surgery semantics). The intervened program is derived, not authored, and correct by construction relative to the theory's declared structure. The theory's causal content *is* its assignment structure, visible in the code. Two observationally equivalent theories that differ in one line's parents differ in their interventional predictions, and that difference is testable wherever interventional data exists: synthetic worlds, natural experiments, policy changes.
-
-Theories that are not structural cannot be intervened on mechanically. An intervention variant that someone writes for such a theory adds causal content the original lacked and is therefore a **new theory** with an `extends` edge (5.10), scored like any other. Read-back review of such a variant is a provisional check; the real check is interventional data.
-
-Surgery applies to the composed program `lens ∘ theory` (5.1). An intervention may act on the lens (a change in testing practice) rather than on the mechanism, and the replaced line must be the right one.
-
-Identification (the do-calculus proper) yields a task rather than a verdict: given a theory's structure, which interventional quantities are computable from observational data, and which natural experiments would identify the rest (5.6).
+1. **Predictive adequacy, out of distribution (Decided).** A theory is judged by how well it predicts observables, and must predict ones not yet observed: future data, new regimes, interventions. Realism is not settled and need not be.
+2. **Falsifiability is the entry rule (Decided).** A program that declares no targets it could score badly on is not a theory.
+3. **No claim is tested alone (Decided).** A bad score indicts a set: theory, lens, data, scorer. Blame is assigned by whoever proposes a supersession that improves the score, priced in bits.
+4. **Theories are generative programs (Decided).** Prediction is running the program; evidence is how well real data scores under it; comparing theories is comparing scores on shared targets. The scorer and the lenses are programs under the same review.
+5. **Theory quality is compression (Call).** Prior weight 2^(−|p|) in a shared reference language; posterior weight ∝ 2^(−[|p| + codelength of data under p]). The reference language is the paradigm: a change of primitives that makes a long theory short is what a paradigm shift is, and the shared library of importable programs is that language. Compression across environments, not within one, recovers invariant (causal) structure, which is why out-of-distribution adequacy forces causal content without any appeal to unobservables. In the pilot the length term is a tie-breaker; the data term dominates within weeks.
+6. **Keep all consistent theories, weighted (Decided).** Consistency is comparative, never absolute. Falsification is weight decaying to negligible relative to the mixture, and is reversible. The mixture is the standing belief; a short program that collapses it is understanding.
+7. **The only trusted kernel is time (Call).** What cannot be faked is the order of commits. Everything else, including the scoring rule, is a revisable program.
+8. **Severity (Call).** A test counts in proportion to how probably it would have failed had the theory been wrong: committed before the data, on targets the program had not seen, differing from what the mixture already predicted. All three are facts in git history.
+9. **Messiness is functional (Decided).** Standings are cumulative scores, so they move by bounded amounts per week and never toggle.
+10. **Interventions are program surgery (Call).** For a program that exposes its assignments, `do(X = x)` is: replace the assignment of X, leave the rest. Derived, not authored, correct by construction relative to the declared structure. The structure *is* the causal claim, and two observationally equivalent programs that differ in one assignment's parents differ in what they predict on an intervention arm.
 
 ---
 
-## 4. The epistemic calculus
+## 4. The design
 
-### 4.1 Four levels, four calculi (Call)
+### 4.1 Two kinds of thing people create
 
-| Level | Calculus | Output |
+**Data vintages.** A stream is a directory `data/<stream>/`; each release is a commit of a CSV plus metadata (jurisdiction, period, `do` arm if any). The git history of the directory is the vintage sequence. Release time is push time, which the host records and the pusher does not control. Streams are revised (backfill), which is why vintages exist: a target is scored against a stated vintage, by default the first release at or after a fixed lag the mission names.
+
+**Programs.** A directory `programs/<name>/` containing:
+
+- `program.py`: takes a masked history (all data before the target) and returns samples of the target. May import other programs. May expose its assignments (4.6).
+- `README.md`: a natural-language account of what it assumes and why, with **tags** naming the mechanisms it encodes (4.5). Required, as on Prove2Me; this is what search indexes.
+- `readback.md`: written by a different model lineage than the author's, stating what the program literally assumes, with every assumption explicit (4.8).
+
+Every theory, lens, definition, baseline, synthetic generator, and the scorer itself is a program. "Definition" and "lens" are roles (a program others import), not kinds.
+
+### 4.2 Time is the commitment
+
+A program's score on a vintage **counts iff the program's commit precedes the vintage's commit.** That is the whole commitment mechanism. There is no separate commit/reveal, no per-prediction commitment, and no preregistration object: the program is the analysis plan, and the scorer runs it on a history masked to end before the target, so "used only prior data" is enforced rather than promised. Methods are therefore public from the moment they are committed, which is the Prove2Me licensing stance and a deliberate choice.
+
+### 4.3 The scorer
+
+One pure function, one program, pinned in a container with no network:
+
+```
+score(program, vintage, target) =
+    samples ← run program on history(vintage) masked before target, fixed seed, time limit
+    pmf     ← negative binomial fitted to samples by moments
+    log pmf(realized value at target)
+```
+
+Summed over a mission's targets. A failed or timed-out run scores as the mission's baseline program. Scores are a cache keyed by (program hash, vintage hash, scorer hash); nobody creates them. Quantiles and WIS are computed from the same samples for comparability with the forecast hubs, but standing uses the log-score.
+
+Negative-binomial-by-moments is a Call: it has no free parameter, suits counts, keeps likelihood-ratio semantics between programs (so the evidence layer and the theory layer are one number), and admits any sampler, which mechanistic epidemic models are.
+
+### 4.4 Weights and standings
+
+```
+weight(program) ∝ exp( Σ counted scores ) × 2^(−amortized length)
+```
+
+where length is gzipped canonical source bytes, and an imported program's length is divided among its importers. This is the Bayes/Hedge rule; its cumulative score is within the length prior of the best single program in hindsight. Stacking is deferred (4.10). A discovery is a program whose entry shifts weight; its size is the bits by which the mixture's total codelength fell. Amortized length is what prices the protective belt: a lens imported by one program is charged to it in full; one imported by twenty is nearly free.
+
+`STANDINGS.md` is generated by the scorer and committed; CI fails when it is stale, the pattern Alex already uses for `STATE.md`.
+
+### 4.5 Claims are tags
+
+A claim such as "absolute humidity reduces transmission" is a tag. Programs declare the mechanisms they encode; the read-back (4.8) checks that the tags match what the code assumes; a claim's standing in a mission is the weight of programs carrying the tag against the weight of those not carrying it. A published effect size is a pair of narrow programs differing in one term. Claims need no arithmetic of their own.
+
+### 4.6 Environments are masks; interventions are arms
+
+An environment is a vintage plus a mask over its rows. The out-of-distribution test is a mask: the mission names held-out jurisdictions, the scorer fits the program on the rest and scores it on the held-out ones, and that score is reported separately as the program's **invariance score**.
+
+An intervention is a stream with `do` metadata: a synthetic world publishes arms (baseline, `do(school = closed)`, `do(vaccination = 0.8)`), and agents request new arms in the mission discussion. Before scoring a program on an arm, the scorer applies surgery (3.10) to the program's exposed assignments. A program that does not expose assignments receives the baseline's score on intervention arms. There is no admission rule; the incentive does the work.
+
+### 4.7 Supersession and recomputation
+
+Objects are immutable. To change a program or a vintage, commit a new one; the old hash and its scores remain. When an imported program, a vintage, or the scorer is superseded, every standing downstream is recomputed from scratch. Nothing propagates, nothing is damped, and there is no blame-assignment machinery: the diff in `STANDINGS.md` is the blame report, and the supersession that improved the score, priced in bits, is the verdict. Prove2Me's "parent proved iff children proved" is the special case where recomputation always returns the same answer.
+
+### 4.8 Read-back
+
+For every program, an agent of a different model lineage than the author's, given the code and its imports but not the README, writes what the program literally assumes. The captain compares it to the README and the tags. Faithfulness is judged on that comparison, not by reading code. This is Prove2Me's mechanism verbatim, and it is also the design's first anti-monoculture measure.
+
+**LLM captains (Decided for the pilot; safeguards Call).** The captain may be an agent. Safeguards: read-back by a different lineage; the human spot-checks a sample; every read-back records which agent wrote it, so trust can be discounted retroactively. A mis-audited program in the pilot is a mis-tagged ledger entry, so the cost is bounded.
+
+### 4.9 Kernel and trust
+
+Two components. **Git**, pushed to a host that records push time: content-addressed, append-only, ordering not under the committer's control. **The scorer**, a pinned container, tiny, tested against synthetic worlds with analytic answers, versioned; every score records its scorer hash, and upgrading the scorer is a recomputation like any other. Anyone who clones the repository can recompute every standing.
+
+Contamination policy is binary: a score counts iff committed before the vintage, or the vintage is from a private synthetic world. There are no discount classes; the weekly stream makes them unnecessary.
+
+### 4.10 Repository layout
+
+```
+science-me/
+  SKILL.md                 # agent entry point, Prove2Me style
+  scorer/                  # the trusted program; container spec; tests
+  data/<stream>/           # vintages as commits; metadata incl. do arms
+  programs/<name>/         # program.py, README.md (tags), readback.md
+  missions/<name>.md       # targets, lag, held-out masks, claims of interest, captain
+  scores/                  # derived cache
+  STANDINGS.md             # generated; CI fails when stale
+  standings.json           # the same, machine-readable (5.4)
+```
+
+A private companion repository holds synthetic generators and publishes their vintages into `data/synthetic-*/`.
+
+### 4.11 What 0.2 had and 0.3 dropped
+
+| Dropped | Replaced by | Comes back when |
 |---|---|---|
-| Inside one theory (parameters, predictive distributions) | Bayesian | a predictive distribution per environment |
-| Between rival theories on shared observables | prequential log-score on committed predictions; relative only | mixture weights |
-| Outside all current theories | predictive checks against a discrepancy statistic (Gelman–Shalizi); the absolute "this family is inadequate" signal | adequacy flags |
-| Across agents and independent sources | betting scores: e-values, which multiply and tolerate optional continuation; markets as the human-facing form | evidence standing |
-
-The levels are not collapsed into one score. In particular: **theories mix, evidence multiplies.** Rival hypotheses combine as a mixture ("one of us is right"); independent evidence about one hypothesis combines as a product (log-odds add).
-
-### 4.2 Scoring (Call)
-
-- Score **distributions, never point estimates**, with proper scoring rules. Averaging point predictions can lose to every component; averaging distributions under a proper rule cannot.
-- Default rule: log-score where a density exists; energy score or CRPS where the theory is a sampler without a tractable likelihood. Any program that emits observations is scorable.
-- A theory silent on an observable is scored there as the standing mixture's prediction. This lets theories with different domains be compared on the full observable set and rewards breadth that pays off.
-- All scores are computed on *committed* predictions (section 5.5). Uncommitted predictions are discussion, not evidence.
-
-### 4.3 Standing weights (Call)
-
-The Solomonoff/Bayes weights (section 3.5) are the **prior** and regularizer. The **standing** weights are chosen for out-of-sample predictive performance (stacking of predictive distributions, Yao–Vehtari–Simpson–Gelman 2018; sequentially, a universal-portfolio-style rule with regret against the best fixed mixture, Cover 1991). Reason: Bayesian model averaging is soft selection and concentrates on one component even when all are wrong (Minka 2000); in the M-open world every component is wrong.
-
-### 4.4 Evidence (Call)
-
-An evidence item carries an e-value against a stated null with a stated alternative (a likelihood ratio is one), so log E is a log-score difference and the evidence layer and the theory layer are one calculus seen two ways. E-values from independent items multiply. Ville's inequality makes the running product anytime-valid: nobody controls when the next dataset arrives, so optional continuation is the normal case, not an abuse.
-
-**Independence is structural, not declared (Call).** Two evidence items are independent only if their environments have disjoint data and independent collection. A survey cycle is an environment; subpopulations or re-analyses of one cycle are not separate environments. Within one environment, several evidence items for the same claim do not multiply: the committed, pre-specified analysis carries the standing, and variations (multiverse) inform a robustness annotation on that single item. This is what stops re-analysis from manufacturing evidence out of one dataset (section 1.2).
-
-### 4.5 Truth maintenance (Call)
-
-An assumption-based truth maintenance system (de Kleer 1986) with graded weights:
-
-- every standing carries the set of assumptions (nodes) it depends on;
-- a contradiction records a **nogood**: a set of nodes that cannot all hold (Duhem–Quine made explicit);
-- blame spreads across the nogood in proportion to prior weakness (Dorling 1979);
-- propagation is damped (section 3.9); a single result moves standings by bounded amounts.
-
-Prove2Me's Property 1 is the degenerate case where every assumption is certain and nogoods never occur.
-
-### 4.6 Canonicalization (Call)
-
-Theories that make the same predictions on all shared observables are the same theory. Canonicalize by predictive equivalence, not by code. With 2^(−|p|) priors the mixture is dominated by the few shortest consistent theories, so duplicates matter mainly for credit.
-
-### 4.7 The mixture's disagreement is the map (Call)
-
-Where mixture components diverge most on an observable not yet observed is where a test has maximal expected information gain (Lindley). Locating such observables and finding or demanding data there is the platform's primary agent task (section 5.6). A field whose mixture stays spread is underdetermined by its data; one whose mixture has collapsed onto a short program is understood. The platform's standing output is the mixture; the platform's goal is to make it unnecessary.
-
-### 4.8 The unit of discovery (Call)
-
-A discovery is a submitted program that, after scoring on committed predictions, takes weight from longer programs. Its size is the number of bits the standing mixture's codelength fell. A second currency: a new **definition** (primitive in the shared library) that shortens many existing programs when they are re-expressed (DreamCoder-style library learning). The first credits theories; the second credits paradigm-level contributions, as Prove2Me's import count credits much-reused theorems.
+| Truth maintenance, nogoods, blame distribution, damping | recompute from scratch (4.7) | never, unless recomputation becomes too slow |
+| Claims as objects with e-values; test specifications | tags over programs (4.5) | never |
+| Evidence items as submissions | the scorer's cache (4.3) | never |
+| Lens as a node type | a program others import; amortized length (4.1, 4.4) | never |
+| Commitment objects, commit/reveal | commit order of programs (4.2) | if methods ever need to be hidden |
+| Interactive `do()` API | intervention arms as streams (4.6) | if arm requests become a bottleneck |
+| Interventional-content classes; admission rule | baseline score on arms for opaque programs (4.6) | never |
+| Four calculi; stacking; anytime-valid tests | one score, Bayes/Hedge weights (4.3, 4.4) | stacking if the mixture collapses badly; tests when a verdict with error control is wanted |
+| Three contamination classes | binary rule (4.9) | if static data is ever scored |
+| Reusable holdout, Thresholdout budgets | streams | if static holdouts are ever used |
+| Density requirement | negative binomial fitted to samples (4.3) | never |
+| Web service and API | repository, CLI, scorer | if contributors outside Alex's loops appear |
 
 ---
 
-## 5. Object model
+## 5. The engine: agents are the industrial loop (Decided: agentic intelligence is a first principle)
 
-All objects are immutable and content-addressed. "Updating" creates a new object that *supersedes* the old; the old remains, with its history.
+The kernel (4.9) is deliberately dumb. Everything that requires judgment is done by agents, and the design's job is to make every agent output checkable by something that is not an agent of the same lineage. That is the whole division of labor, and it is where the industrialization comes from: intelligence proposes, the kernel scores, intelligence reads the scores and proposes again. FunSearch and AlphaEvolve are this loop with a cheap exact evaluator; Prove2Me is this loop with Lean; science.me is this loop with the scorer.
 
-### 5.1 Environment
+### 5.1 The loop
 
-A dataset together with the conditions under which it was generated.
+Each agent session, as `SKILL.md` will describe it:
 
-- data (by content hash; the bytes themselves may be held elsewhere, including by a custodian, section 6.2)
-- a **measurement model**, also called a **lens**: a program mapping what a theory predicts (incidence, say) to what is recorded (reported admissions after delays, under-ascertainment, revisions): `observation = lens(theory output)`. It is its own node: contestable, reusable across theories, credited by reuse like a definition (5.7). Its program length counts in the total codelength of any theory composed with it, so a long single-use lens that rescues one theory on one dataset is charged in full (Lakatos's protective belt, priced in bits), while a short lens that many theories share and that can be checked against its own calibration data is progressive.
-- declared conditions: population, time, regime, what differs from sibling environments
-- provenance: collector, collection dates, release schedule (for streams)
-- for streams, **vintages**: the data as of each release date. Streams get revised (backfill), so an environment for a stream is the pair (target period, vintage), and a commitment names the vintage it resolves against (5.5).
-- access class: public / time-locked / custodian-held / synthetic-private
+1. Read `standings.json` and the mission files.
+2. Pick a task (5.2), prioritized by the agent's own estimate of expected information gain. The platform does not compute this; agents do, from the standings and the programs' READMEs.
+3. Produce the output: a program, an arm request, a mission edit, a read-back, a flag.
+4. The output is checked (5.3).
+5. The scorer runs as vintages arrive; standings regenerate; repeat.
 
-Datasets become environments because invariance is detectable only across variation. Five environments of one phenomenon under different conditions are worth more than one five times the size.
+### 5.2 Tasks (what intelligence does)
 
-### 5.2 Claim
-
-A falsifiable statement about observables.
-
-- natural-language statement, plus a formal predictive content (what distribution over which observables in which environments)
-- **domain of applicability**: where it claims to predict. Must extend beyond the environments used to build it, or it is a lookup table.
-- **falsification criterion**: the observation that would count against it, stated in advance
-- source (paper, textbook, or "frontier")
-- dependencies: definitions, auxiliaries, measurement models it assumes
-
-### 5.3 Theory
-
-A program.
-
-- source code in the reference language (section 10.1), taking an environment description as input and emitting a predictive distribution or samples
-- declared domain of applicability
-- imports: definitions and other theories it builds on
-- length in bits under the reference machine (computed, not declared)
-- a natural-language account of what it says and why (required, as on Prove2Me; this is what search indexes)
-
-A theory is a claim with executable predictive content. The hierarchy hypothesis → model → theory → programme is represented by domain breadth and import structure, not by separate types. (Call)
-
-**Interventional content**, three classes, recorded on the theory (Call): **structural**, where `do()` is derived by surgery (3.10), preferred and marked as such; **declared**, where an intervention variant has been submitted as a new theory with an `extends` edge; **none**, a joint sampler or black box, rung one only and labeled so.
-
-### 5.4 Evidence item
-
-A reproducible computation relating a theory or claim to an environment.
-
-- environment hash, code hash, pinned execution environment, output hash
-- the score produced (e-value, log-score, or discrepancy statistic) and against what
-- the commitment it resolves, if any
-- a blind **read-back** (section 6.4) of what the analysis literally tests
-
-Anyone can re-run it. Its reproducibility is mechanical; its *relevance* (does it actually test the claim?) is judged against the read-back and is contestable.
-
-### 5.5 Commitment
-
-A hash of a prediction (or analysis plan) plus a timestamp in an append-only log, revealed later.
-
-- hash, timestamp, committer, the environment or stream it concerns, expected resolution date, and for streams the resolution vintage (the as-of date of the data it will be scored against)
-- reveal: the pre-image, checked against the hash
-- resolution: the evidence item that scores it
-
-Commitments are the kernel. Provenance facts checkable from them: committed before the data existed; the environment was not among the theory's build environments; the prediction differed from the standing mixture's.
-
-### 5.6 Test (the atomic unit of work)
-
-(claim or theory) × environment × method × result × commitment. A test is what an agent can complete alone and what composes. Atomic task shapes that need no coordination:
-
-- reproduce an existing evidence item
-- vary an analysis across its specification space (multiverse) and report robustness
-- extend a claim to an environment it was not built on
-- find an environment where two standing theories disagree and locate data there
-- find a natural experiment relevant to a claim
-- run an identification analysis on a structural theory: which of its interventional claims are computable from observational data, and what would identify the rest (3.10)
-- write or calibrate a lens (5.1) against instrument or reporting data
-- commit a prediction for a scheduled release
-- audit a pipeline; write a read-back
-- propose a definition that shortens existing theories
-
-### 5.7 Definition
-
-A primitive in the shared reference library: a distribution, transform, estimator, or data-structure that theories import. Immutable, versioned by supersession. Credited by the bits it saves across theories that import it.
-
-### 5.8 Nogood
-
-A set of nodes recorded as jointly untenable, with the evidence item that produced it. Blame distribution is computed, not declared.
-
-### 5.9 Mission
-
-A captained bundle, as on Prove2Me: headline goal, the claims and definitions in its audited core, ordered milestones, a discussion channel.
-
-Two types (Call):
-
-- **Standing mission**: "establish the standing of the claims in this paper/literature." Milestones are the key published claims; tasks are reproduce / vary / extend / commit. A published claim is formalized as a **test specification**, not a generative program: observables, environment class, a null, and an alternative equal to the published effect (with its uncertainty). Its standing is the cumulative e-value against that null across independent environments (4.4), plus a robustness annotation from the multiverse task. (Call)
-- **Frontier mission**: "find a regularity nobody has reported, commit it for the next release." Milestones are environments to cover and streams to commit against; the deliverable is a theory as a program (5.3) that takes weight in the mixture (4.3). Theories as programs live here; the standing mission does not require them.
-
-The audit surface is the mission core: claims, falsification criteria, the environments' measurement models. Agents introduce anything below it without audit, as on Prove2Me, because the trusted object is the scoring of audited claims on committed predictions, not the agent's chosen decomposition.
-
-### 5.10 Edges
-
-depends-on, imports, extends (a theory adding interventional content to another, 3.10), tests, supports (with e-value), contradicts (with nogood), supersedes, predictively-equivalent-to, committed-for. The graph is a DAG except for `contradicts`, which is symmetric.
-
----
-
-## 6. Trust architecture
-
-### 6.1 The trusted base
-
-1. the append-only commitment log (hashes and timestamps);
-2. the arithmetic of the scoring rules;
-3. the reproducibility of evidence items (same inputs, same hash out).
-
-Nothing else is trusted. The scoring rules' *choice* is revisable; their *arithmetic* on recorded objects is not.
-
-### 6.2 Holdouts, ranked by trust required (Call)
-
-1. **Future data.** No custodian; only timestamps. Strongest.
-2. **Time-locked data.** Collected now, encrypted, released on schedule.
-3. **Custodian-held holdout.** The platform (or several custodians with secret sharing) holds it. A trusted party, which is a real departure from Prove2Me. Access is a *budget*: scores are returned through a reusable-holdout mechanism (Dwork et al. 2015, Thresholdout) that charges an information budget per query and returns noise-calibrated answers.
-4. **Public data plus a promise not to have looked.** Worthless for LLM agents and treated as such.
-
-Holdouts rotate as in CASP: each round's holdout becomes public afterward and is replaced.
-
-### 6.3 Contamination policy (Call)
-
-LLM agents have read the public datasets and the papers. A finding on public data may be recall; a prediction on it may be memorized. Therefore, three weight classes (Call):
-
-1. **Full weight**: the commitment's timestamp precedes the environment's public release date, or the environment is custodian-held or synthetic-private. Both facts are mechanical.
-2. **Reduced weight**: the environment was released after the *vendor-published* training cutoff of the model the agent declares. The cutoff and the release date are public facts, not promises, but the declaration of which model ran is a promise; hence reduced, not full.
-3. **Provisional**: everything else, including any self-declared cutoff with no public anchor. This is class 4 of section 6.2.
-
-The discount factors are left to the builder.
-
-### 6.4 Read-back (carried over from Prove2Me)
-
-For each evidence item and each claim in a mission core, an independent agent that has not seen the source states, in plain language, what the analysis literally tests or what the claim literally asserts, with every assumption explicit. The auditor compares that testimony to the source. Faithfulness is judged on the comparison, not by reading code.
-
-**LLM captains (Decided for the pilot; safeguards Call).** A captain may be an agent. Safeguards: the read-back is produced by a different model lineage from the one that drafted the claim (Alex already alternates Claude and Codex; this is also the design's first anti-monoculture mechanism); the human spot-checks a sample of audited claims rather than all of them; and every audited claim records which agent audited it, so trust can be discounted retroactively. Prove2Me forbids delegating the audit because a bad statement contaminates everything above it; in the pilot a mis-audited claim is a ledger entry, not a published proof, so the cost is bounded.
-
-### 6.5 Synthetic worlds (Decided (Alex proposed), details Call)
-
-Private generators with known ground truth, exposing observations through several measurement channels, and accepting intervention requests (`do(X = x)`), so the full loop (hypothesize, design, intervene, update) runs end to end. They are the platform's unit test: does the mixture converge to the generator, how fast, how often is the true program wrongly demoted, is injected fake evidence caught.
-
-Cautions: a generator written in the reference language is short by construction, biasing the test toward the paradigm, so include generators written adversarially or in other idioms (agent-based models, cellular automata). Goodhart applies to the test bed, so keep some generators fully private and keep minting new ones.
-
-### 6.6 The platform's own calibration
-
-The platform is a theory about which theories are true, and it is scored prequentially: the fraction of its standing theories' outstanding commitments that resolve favorably, reported continuously. This is the platform's own falsifiable claim.
-
----
-
-## 7. Failure modes and designed responses
-
-| Failure | Mechanism | Response in this design |
+| Task | Trigger in the standings | Output |
 |---|---|---|
-| Forking paths / garden of forking paths | many analyses, report the one that worked | commitment before data (5.5); multiverse as a task type (5.6); reusable holdout budget (6.2) |
-| Training-data contamination | agents recall rather than discover | post-cutoff and custodian data only at full weight (6.3) |
-| Evidence exhaustion | finite information in fixed data | organize around streams and OOD commitments, not re-analysis (3.7, 5.1) |
-| Correlated error / monoculture | many copies of one model | read-back by a different model lineage than the drafter (6.4); diversity of models, methods and environments is a measured goal; **further mechanism Open** (section 9) |
-| Information cascades | agents read each other and converge | independent assessment before exposure to consensus; **mechanism Open** |
-| Manufactured doubt | flawed falsifications are cheap | submission costs compute or reputation; **mechanism Open** |
-| Goodhart | any metric gamed | credit is compression gain on committed data (4.8), which rewards only what nothing else predicted; no volume metrics; **further mechanism Open** |
-| Brittleness | retraction cascades on noise | graded, damped truth maintenance (4.5) |
-| Correlation mountain | rung-one findings that explain nothing | theory tier with compression criterion (3.5); cross-environment invariance (3.5, 5.1); frontier missions (5.9) |
-| Illegibility | a graph nobody can read | required natural-language accounts; read-backs; the map is the primary view and every number traces to it |
-| Garbage in | unmodeled selection in datasets | measurement model is a contestable node (5.1) |
-| Overengineering | building the platform before the mechanism is proven | the pilot (section 8) is a ledger for 50–100 claims with four object types and one scoring rule |
+| Propose a theory | a claim of interest with no program on one side; a mechanism from the literature absent from the mixture | a program with README and tags |
+| Find a crucial test | top programs disagree most on an upcoming target or a hypothetical arm | an arm request (synthetic) or a pointer to real data from that regime |
+| Assign blame | a program's score dropped, or its invariance score is poor | a supersession of the theory, a lens, or a shared program, with a README saying why |
+| Translate the literature | a mission's claim of interest cites a paper | a program encoding the paper's mechanism, tagged |
+| Write a read-back | any new program | `readback.md`, by a different lineage |
+| Shorten the library | several programs share code | a shared program others import (DreamCoder's sleep phase) |
+| Draft or edit a mission | a captain's request, or a new stream | a mission file for the human to spot-check |
+
+These replace mechanisms earlier versions tried to engineer: prioritization, identification analysis, natural-experiment search, blame distribution. All are judgment, so all are agent tasks.
+
+### 5.3 Checks (what keeps intelligence honest)
+
+Three checkers, and every output has exactly one:
+
+- **The scorer** checks predictions. Programs cannot argue with it.
+- **A different model lineage** checks text: read-backs against READMEs and tags, mission drafts, blame narratives.
+- **The human** checks agenda and samples: which missions and streams exist, and a spot-check of read-backs.
+
+Nothing an agent writes enters a standing without passing through one of these. The scorer is a proper scoring rule, so optimizing against it is honest prediction; its one known limitation is that the negative-binomial projection cannot represent multimodal predictives, which is a limitation rather than an exploit.
+
+### 5.4 What this does to the design
+
+- The standings must be machine-readable: `standings.json` beside `STANDINGS.md`, including per-target disagreement among the top programs, so agents can find crucial tests without parsing prose.
+- Throughput scales with compute: scoring and read-backs are parallel, git append is cheap, and there is no merge queue. The same scaling story as Prove2Me.
+- The human role narrows to agenda, spot-check, and reading the output. The pilot's LLM captain is the first instance.
+- The monoculture risk concentrates, because proposer, prioritizer and auditor are all agents. Lineage diversity in read-backs is the minimum; weighting by lineage diversity is the first thing to add from section 8.
 
 ---
 
-## 8. Pilot
+## 6. Failure modes
 
-### 8.1 Domain (Decided: respiratory surveillance, with synthetic worlds first for immediate feedback)
-
-Two tiers, run concurrently.
-
-**Tier 1, feedback on demand: private synthetic epidemic worlds.** Generators with known ground truth in the same domain as tier 2: a stochastic multi-jurisdiction SEIR-type model with seasonal forcing and jurisdiction-specific parameters, observed through a reporting lens (delay, backfill, under-ascertainment, age-specific hospitalization), with a `do()` interface on contact rate, school status and vaccination coverage. Plus at least one adversarial generator not written as a compartmental model (an agent-based network model), so the true program is not short in the reference language by construction. Resolution is immediate. This is where the machinery is built and debugged, where the full loop (hypothesize, intervene, update) runs end to end, and where a lens swap (a new observation channel on the same generator) tests whether the platform absorbs it in a lens rather than in a theory rewrite.
-
-**Tier 2, the real stream: US respiratory disease surveillance.** Weekly hospital admissions for influenza, COVID-19 and RSV from NHSN, and outpatient ILINet, the data behind the CDC FluSight, COVID-19 and RSV forecast hubs. Why:
-
-- Resolution is weekly. The 2026–27 season is starting, so every week of data is post-cutoff for every model, and commitments earn full weight (6.3) by construction.
-- Hub infrastructure exists to borrow and interoperate with: target definitions, data formats, proper scoring (WIS), and a published ensemble that is the mixture result (4.1) in the wild.
-- It is theory-rich, not just forecasting. Mechanistic transmission models compete with phenomenological ones; the standing mission can formalize published claims about transmission; jurisdictions are environments, so "do transmission parameters transfer across states" is an invariance question with real content.
-- Backfill makes lenses (5.1) necessary from the first week, which exercises the measurement-model machinery on real data.
-- A natural experiment is on record: the near-absent 2020–21 influenza season under COVID-19 interventions.
-
-Standing-mission claims, as examples for the captain rather than decisions: absolute humidity and transmission (Shaman and Kohn 2009); school holidays and transmission (Cauchemez et al. 2008); vaccination coverage and hospitalization; the post-pandemic shift in RSV seasonality; the effect of 2020–21 interventions on influenza.
-
-Frontier mission: weekly committed predictive distributions per jurisdiction from theories written as structural programs composed with lenses. The deliverable is a theory that takes weight from the baseline mixture, and an invariance result: fitted on some jurisdictions, committed and scored on others.
-
-Known risks: a crowded field (the hubs host dozens of teams), so the pilot's contribution is the ledger, the standings and the invariance results, not beating the ensemble; a season is only about thirty weeks; revisions complicate scoring (vintages, 5.1); jurisdictions are correlated through shared drivers (handled in 8.2).
-
-Alternatives considered and set aside: NHANES (deferred: a two-year release cycle, and the latest release is already in current models' training data, so no clean resolution inside a year); CSEP earthquake forecasting (the strongest existing precedent for prospective committed testing, since 2007, but events are irregular); Rubin/LSST alerts (needs astronomy captains); Alex's masked-data reliability domain (full competence to captain, niche audience).
-
-### 8.2 Scope
-
-- Tier 1: at least three synthetic worlds with private generators (two compartmental with different lenses, one adversarial agent-based), each with a `do()` interface, each the subject of an ordinary mission.
-- Tier 2: environments are (jurisdiction, season, vintage) for at least ten jurisdictions plus national; two missions, one standing (20–50 published claims about transmission, formalized as test specifications, 5.9) and one frontier (weekly commitments).
-- Object types: environment, claim, theory, evidence item, commitment. Lenses and definitions as needed; nogoods as needed.
-- Scoring: log-score for standing (4.2); hub-format quantile export and WIS for comparability with hub teams.
-- Contributions come from Alex's agent loops through the harness; no orchestrator is built (Decided). The captain is an LLM with the 6.4 safeguards (Decided).
-- **Independence axis (Call).** E-values multiply across *weeks*, by sequential conditioning: one e-value per week, computed conditional on all prior data, across all jurisdictions jointly, which is a test supermartingale regardless of cross-jurisdiction correlation. Jurisdictions are *not* multiplied across; they are the out-of-distribution axis: a theory fitted on some is committed on the others and scored by log-score difference against the baseline mixture.
-
-Builder-check resolutions (all Call):
-
-- **The platform executes evidence items itself**, in a sandbox, as Prove2Me verifies server-side. An evidence item exists, and can carry standing, only once the platform has reproduced it; contributor-side results are submissions, not evidence. NHSN and ILINet data are public, which makes this possible for the pilot.
-- **Log-score only.** Pilot theories must expose a density (the PPL subset of the reference language). This keeps the e-value-as-likelihood-ratio identity (4.4) exact. Sampler-only theories, and the energy score or CRPS they need, are post-pilot.
-- **Synthetic worlds are environments in the same ledger**, access class synthetic-private, and their missions are ordinary missions. Generators are written and held by someone other than the sessions that propose theories against them, outside any workspace a proposer can read; proposers see only observations and the `do()` interface. Model lineage is not a contamination channel (a model cannot recall a program it wrote in another session), but shared context is.
-- **No Thresholdout accounting in the pilot.** Synthetic-world queries are counted, not budgeted. Real custodian-held and time-locked holdouts are out of scope (8.4).
-
-### 8.3 Success criteria (falsifiable)
-
-1. Tier 1: the mixture concentrates on the true generator (or its predictive equivalent) within a budget the builder sets; `do()` predictions derived by surgery from structural theories match the generator's interventions; injected fake evidence is detected; a lens swap is absorbed by a new lens, not a theory rewrite.
-2. Tier 2: (a) at least eight consecutive weekly commitments resolve at full weight and the platform's calibration (6.6) is reported; (b) standings for the audited claims move materially from "published = supported" for a nontrivial fraction, with provenance; (c) at least one invariance result: a theory fitted on a subset of jurisdictions, committed and scored on the rest.
-3. At least one person who is not Alex contributes a test.
-4. Someone in the field says the standing report told them something they did not know.
-
-If 1–2 fail, the mechanism is wrong and no platform is built. If 3–4 fail, the mechanism may be right and the social layer is wrong.
-
-Time horizon (Decided: a year is too long). Tier 1 produces results in days. Tier 2 produces its first full-weight resolution one week after the first commitment and satisfies 2(a) about two months after it.
-
-### 8.4 Explicitly out of scope for the pilot
-
-Real-money stakes; a public reputation system; moderation; multiple captains; any domain beyond the two tiers above; a UI beyond what agents and the captain need; real custodian-held or time-locked holdouts and Thresholdout budgeting; sampler-only theories; an orchestration loop that runs proposer agents automatically; beating the hub ensemble, which is not a goal; NHANES and the nutrition literature, which are deferred to a later standing mission.
+| Failure | Response |
+|---|---|
+| Forking paths | only pre-commit programs score (4.2) |
+| Training-data contamination | the stream is post-cutoff for every model by construction; synthetic worlds are private |
+| Evidence exhaustion | the platform is organized around streams, not static re-analysis |
+| Monoculture | read-back by a different lineage (4.8); **further mechanism Open** |
+| Cascades | **Open** (section 8) |
+| Manufactured doubt | **Open**; in the pilot, one contributor |
+| Goodhart | credit is weight shift on committed data, which rewards only what nothing else predicted; no volume metrics |
+| Brittleness | cumulative scores move by one week's worth per week |
+| Correlation mountain | invariance scores (4.6); the length prior; intervention arms |
+| Illegibility | README and read-back on every program; `STANDINGS.md` is readable |
+| Scorer bugs | the scorer is a versioned program tested against analytic cases; recompute on upgrade |
+| Overengineering | section 4 fits on one screen |
 
 ---
 
-## 9. Open: the social layer
+## 7. Pilot
 
-Deliberately undecided. Alex's instruction: copy existing systems where possible, Prove2Me first. Questions a builder cannot answer alone:
+### 7.1 Domain (Decided)
 
-1. **Cost of submission.** What does a test cost: compute, reputation stake, nothing? This is the sole defense against manufactured doubt and must be set before any public opening.
-2. **Credit.** Compression gain and definition reuse are the proposed currencies (4.8). How they become a portable credential (a track record, as on Metaculus), and whether credit flows to the human, the agent, or both, is open. Prove2Me credits the human account.
-3. **Conflict.** Who adjudicates a contested read-back or a contested measurement model? Prove2Me uses captains plus moderators. Whether that scales past one domain is open.
-4. **Diversity and cascades.** The anti-monoculture and anti-cascade mechanisms (section 7) are named but not designed. Candidates: blind phases before discussion is visible; weighting by model/method diversity; rewarding disagreement that later resolves in the dissenter's favor.
-5. **Agenda.** Captains are human; how captains are recruited and what qualifies one is open.
-6. **Markets.** Whether to run play-money markets over claim standings alongside the scoring, as the human-facing aggregation layer.
+Two tiers, run concurrently, in one domain.
 
-Sources to copy from, in rough order of fit: Prove2Me (missions, captains, read-backs, credit for reuse, idle-token onboarding); the forecast-hub model (committed weekly submissions, proper scoring, ensemble as the standing output); Metaculus (track records as credentials); Polymath (open-ended but rule-governed collaboration); Stack Exchange (reputation gating actions); CASP (rounds with rotating holdouts).
+**Tier 1, feedback on demand: private synthetic epidemic worlds.** A stochastic multi-jurisdiction SEIR-type generator with seasonal forcing and jurisdiction-specific parameters, observed through a reporting lens (delay, backfill, under-ascertainment), publishing a baseline arm and at least two intervention arms. Plus one adversarial generator not written as a compartmental model (an agent-based network model), so the true program is not short in the reference language by construction. Vintages are released on demand. This is where the scorer is built and debugged, and where a lens swap (a new observation channel on the same generator) tests whether the platform absorbs it in an imported program rather than a theory rewrite.
 
-### 9.1 On git as a substrate (Call, raised by Alex)
+**Tier 2, the real stream: US respiratory disease surveillance.** Weekly hospital admissions for influenza, COVID-19 and RSV from NHSN, and outpatient ILINet, the data behind the CDC forecast hubs. The 2026–27 season is starting, so every week is post-cutoff for every model. Hub target definitions, formats and scoring exist to borrow. The field is theory-rich: mechanistic transmission programs compete with phenomenological ones, and jurisdictions are the invariance axis. Backfill exercises vintages from the first week. One natural experiment is on record: the near-absent 2020–21 influenza season.
 
-Git's *object store* is right; git's *workflow* is wrong.
+Claims of interest for the mission README, as examples: absolute humidity and transmission (Shaman and Kohn 2009); school holidays (Cauchemez et al. 2008); vaccination coverage and admissions; the post-pandemic RSV seasonality shift; the 2020–21 interventions.
 
-- Right: content-addressed, immutable objects in a Merkle DAG. Every object in section 5 is exactly that, and the commitment log is a hash chain. Appending immutable objects scales horizontally; a million agents appending to a sharded append-only store is an ordinary systems problem.
-- Wrong: mutable branches, merges, and a single integration point. The Prove2Me paper argues this directly: large swarms editing shared files serialize through a merge queue, which becomes the empirical bottleneck, and the resulting interdependent files cannot be reused in isolation. Prove2Me's answer, which this design adopts, is that nothing is ever merged: each object is self-contained, carries its own context, and is added once. There is no trunk to contend for.
+Alternatives set aside: NHANES (two-year cycle, latest release already in training data); CSEP earthquake forecasting (the strongest precedent for prospective committed testing, irregular events); Rubin/LSST (needs captains); masked-data reliability (niche).
 
-So: a git-like object model (or IPFS/Merkle-DAG equivalent, or a database with content-addressed rows) without git. Whether to literally use git's storage is left to the builder (section 10).
+### 7.2 Scope
 
----
+- One mission, `missions/respiratory-2026-27.md`: targets (streams, jurisdictions, weeks), resolution lag, held-out jurisdictions, claims of interest, captain (an LLM, 4.8).
+- Three synthetic worlds (two compartmental with different lenses, one adversarial), each with a baseline and at least two intervention arms, each with its own mission file.
+- A baseline program (last-value negative binomial) in every mission.
+- Contributions come from Alex's existing agent loops through `SKILL.md`; no orchestrator is built (Decided).
+- Scores are summed across jurisdictions and weeks for weights; this is a score, not a test, and claims no error control.
 
-## 10. Left to the builder
+### 7.3 Success criteria (falsifiable)
 
-Technical choices this document does not make. Where Claude has a lean, it is noted.
+1. Tier 1: weight concentrates on the generator's predictive equivalent within a budget the builder sets; surgery-derived predictions on intervention arms match the generator; a lens swap is absorbed by an imported program; a deliberately wrong program injected with a false README is caught by read-back.
+2. Tier 2: (a) eight consecutive weekly vintages scored, with the platform's calibration reported; (b) at least one claim of interest has a standing that differs materially from "published = supported," with provenance; (c) at least one invariance score reported for a program fitted on some jurisdictions and scored on the held-out ones.
+3. One person who is not Alex commits a program.
+4. Someone in the field says `STANDINGS.md` told them something they did not know.
 
-1. **Reference language for theories.** Must be executable, sandboxed, and support sampling; a probabilistic programming language is the natural fit (lean: a Python-hosted PPL so that "any Python program" is admissible as a sampler while densities are available when written in the PPL subset). Program length under the reference machine must be computable and stable; the builder defines the measure.
-2. **Storage and API.** Content-addressed object store; append-only commitment log with trusted timestamps (lean: timestamps anchored to an external, publicly verifiable source, so the platform itself is not trusted for ordering). API shape should let an agent do everything from a shell, as Prove2Me's does.
-3. **Execution of evidence items.** Pinned, reproducible environments (containers), with deterministic seeds; output hashing with declared numerical tolerances.
-4. **Scoring implementation.** Choice of energy score vs CRPS for sample-only theories; stacking/universal-portfolio details; damping constants for truth maintenance; the contamination discount schedule (6.3); holdout budget accounting (6.2).
-5. **Read-back protocol.** Which agent, with what context withheld, and how the comparison is recorded.
-6. **Synthetic world generators.** Format, interface for `do()` queries, rotation schedule.
-7. **Environment metadata schema.** What "conditions" and "measurement model" contain, structurally, so that cross-environment comparison is mechanical.
-8. **Agent harness.** A SKILL.md-style entry point with references, mirroring Prove2Me's workspace repo, so onboarding is "point your agent at one URL."
-9. **Hub interoperability.** Weekly ingestion of NHSN and ILINet vintages; export of committed predictive distributions in hub quantile format with WIS computed alongside the log-score, so pilot theories are comparable with hub teams without being submitted to the hubs.
-10. **Synthetic epidemic generators.** The compartmental and agent-based generators of 8.1, their reporting lenses, and the `do()` interface; stored and run where no proposing session can read them.
-11. **Surgery implementation.** The structural-program subset of the reference language on which `do()` is defined mechanically, and the check that a submitted theory is in that subset.
+If 1 or 2 fails, the mechanism is wrong and nothing more is built. If 3 or 4 fails, the mechanism may be right and the social layer is wrong.
+
+Time horizon (Decided: a year is too long). Tier 1 in days. Tier 2's first counted score one week after the first program commit; 2(a) about two months after.
+
+### 7.4 Out of scope
+
+Real-money stakes; reputation; moderation; multiple captains; other domains; a UI beyond the repository and `STANDINGS.md`; a web service; stacking; anytime-valid tests; static holdouts; beating the hub ensemble; NHANES.
 
 ---
 
-## 11. References
+## 8. Open: the social layer
 
-Platform and prior art
+Deliberately undecided. Alex's instruction: copy existing systems where possible, Prove2Me first. With git as the substrate, the pilot gets defaults for free: a submission is a commit or pull request, credit is authorship, conflict is review. Whether those survive contributors outside one person's agent loops is the open question. Specifically:
 
-- Chen, Marwaha, Lu, Yuen, Peng. *Prove2Me: An Open Collaborative Platform for Scaling Math Formalization.* arXiv 2608.28433 (2026).
-- Romera-Paredes et al. *FunSearch* (2023); *AlphaEvolve* (2025): LLM proposes programs, mechanical scorer evaluates.
-- Ellis et al. *DreamCoder* (2021): library learning.
-- Dwork, Feldman, Hardt, Pitassi, Reingold, Roth. *The reusable holdout.* Science (2015).
-- Patel, Burford, Ioannidis. *Assessment of vibration of effects due to model specification.* J Clin Epidemiol (2015).
-- Steegen, Tuerlinckx, Gelman, Vanpaemel. *Increasing transparency through a multiverse analysis.* (2016).
-- Udrescu, Tegmark. *AI Feynman.* (2020); La Cava et al. *SRBench* (2021).
-- Swanson. Fish oil, Raynaud's syndrome, and undiscovered public knowledge (1986).
+1. **Cost of submission**: compute, reputation, nothing. The sole defense against manufactured doubt.
+2. **Credit**: weight shift and import count are the currencies; how they become a portable credential, and whether it flows to the human or the agent, is open. Prove2Me credits the human account.
+3. **Conflict**: who adjudicates a contested read-back. Prove2Me: captains plus moderators.
+4. **Diversity and cascades**: blind phases before discussion is visible; weighting by lineage diversity; rewarding dissent that later wins.
+5. **Agenda**: how captains are recruited.
+6. **Markets**: play-money markets over claim standings as the human-facing layer.
 
-Epistemology and statistics
+Sources: Prove2Me; the forecast hubs; Metaculus; Polymath; Stack Exchange; CASP.
 
-- Popper, *Conjectures and Refutations*; Lakatos, *The Methodology of Scientific Research Programmes*; Kuhn, *Structure*; Mayo, *Statistical Inference as Severe Testing* (2018); van Fraassen, *The Scientific Image*; Worrall, structural realism (1989); Peirce, "The Fixation of Belief" (1877); Merton, norms of science (1942).
-- Gelman, Shalizi. *Philosophy and the practice of Bayesian statistics.* BJMSP (2013).
-- Dawid. Prequential principle (1984). Rissanen, MDL (1978). Solomonoff (1964). Cover, universal portfolios (1991).
-- Yao, Vehtari, Simpson, Gelman. *Using stacking to average Bayesian predictive distributions.* (2018). Minka, *Bayesian model averaging is not model combination* (2000).
-- Grünwald, de Heide, Koolen. *Safe Testing.* JRSS-B (2024). Shafer, *Testing by betting.* JRSS-A (2021). Ramdas, Grünwald, Vovk, Shafer. *Game-theoretic statistics and safe anytime-valid inference.* Stat Sci (2023). Vovk, Wang. *E-values.* Ann Stat (2021).
-- Peters, Bühlmann, Meinshausen. *Causal inference by using invariant prediction.* JRSS-B (2016). Schölkopf et al. *Toward causal representation learning.* (2021). Woodward, *Making Things Happen* (2003). Pearl, *Causality* (2009).
-- Doyle, truth maintenance (1979); de Kleer, ATMS (1986); Dorling, Bayesian resolution of Duhem (1979).
-- Baron, Mellers, Tetlock, Ungar. *Two reasons to make aggregated probability forecasts more extreme.* (2014). Hinton, products of experts (2002).
-- Cramer et al. COVID-19 Forecast Hub ensemble evaluation. PNAS (2022).
+### 8.1 Git as substrate (Call, raised by Alex)
 
-Pilot domain
-
-- Mathis et al. *Evaluation of FluSight influenza forecasting in the 2021–22 and 2022–23 seasons.* Nature Communications (2024).
-- Bracher, Ray, Gneiting, Reich. *Evaluating epidemic forecasts in an interval format.* PLoS Comput Biol (2021): the weighted interval score.
-- Shaman, Kohn. *Absolute humidity modulates influenza survival, transmission, and seasonality.* PNAS (2009).
-- Cauchemez et al. *Estimating the impact of school closure on influenza transmission from Sentinel data.* Nature (2008).
-- Schorlemmer et al. *The Collaboratory for the Study of Earthquake Predictability: achievements and priorities.* Seismol Res Lett (2018): prospective committed testing of forecast models.
+Git's object store is right and git's workflow is wrong. The pilot uses the store (content-addressed, append-only, externally timestamped) and avoids the workflow: there is no trunk to merge into, because programs are self-contained and added once. The Prove2Me paper names the merge queue as the bottleneck of large swarms; this design has no merge queue. A million agents appending to a sharded append-only store is an ordinary systems problem; a million agents merging into one branch is not.
 
 ---
 
-## 12. Changelog
+## 9. Left to the builder
+
+1. **Program interface.** The `program.py` contract (inputs: masked history as a dataframe plus target spec; output: samples), the optional exposed-assignments convention that surgery acts on, and the import mechanism.
+2. **Scorer.** Container spec, seeds, time and memory limits, the negative-binomial fit, WIS alongside, the cache format, `STANDINGS.md` generation, CI staleness check.
+3. **Ingest.** Weekly NHSN and ILINet pulls into `data/`, with vintage metadata; the resolution lag.
+4. **Synthetic generators.** The three generators, their lenses and arms, in the private repository; the publishing step.
+5. **Length measure.** Gzipped canonical source; the amortization over importers.
+6. **SKILL.md.** Mirroring Prove2Me's: setup, roles, the loop and task table of section 5, the read-back protocol.
+
+---
+
+## 10. References
+
+Platform and prior art: Chen et al., *Prove2Me*, arXiv 2608.28433 (2026). Romera-Paredes et al., *FunSearch* (2023); *AlphaEvolve* (2025). Ellis et al., *DreamCoder* (2021). Steegen et al., multiverse analysis (2016). Udrescu and Tegmark, *AI Feynman* (2020).
+
+Epistemology and statistics: Popper; Lakatos; Kuhn; Mayo, *Statistical Inference as Severe Testing* (2018); van Fraassen, *The Scientific Image*; Worrall (1989); Peirce (1877); Merton (1942). Gelman and Shalizi (2013). Dawid, prequential principle (1984). Rissanen, MDL (1978). Solomonoff (1964). Cover, universal portfolios (1991). Yao, Vehtari, Simpson, Gelman, stacking (2018). Minka (2000). Grünwald, de Heide, Koolen, *Safe Testing* (2024). Shafer, *Testing by betting* (2021). Peters, Bühlmann, Meinshausen, invariant prediction (2016). Schölkopf et al. (2021). Woodward (2003). Pearl, *Causality* (2009). Tetlock et al., extremizing (2014).
+
+Pilot domain: Mathis et al., FluSight evaluation, Nature Communications (2024). Bracher, Ray, Gneiting, Reich, WIS (2021). Cramer et al., COVID-19 Forecast Hub ensemble, PNAS (2022). Shaman and Kohn, PNAS (2009). Cauchemez et al., Nature (2008). Schorlemmer et al., CSEP (2018).
+
+---
+
+## 11. Changelog
 
 - **0.1** (2026-10-23): initial draft from the brainstorm.
-- **0.1.1** (2026-10-23): builder check applied. Added: structural independence rule for e-values (4.4); claims as test specifications in standing missions (5.9); three contamination weight classes (6.3); pilot execution model, log-score-only rule, synthetic-world boundary, and holdout scope (8.2); criterion 2 split (8.3); pending decisions for Alex (top).
-- **0.2** (2026-10-23): Alex's decisions applied. Pilot re-centred on respiratory disease surveillance (weekly resolution) with synthetic epidemic worlds for feedback on demand; NHANES deferred (8). Contributions from Alex's agent loops, no orchestrator; LLM captain with safeguards (6.4). Added: interventions as program surgery and three classes of interventional content (3.10, 5.3); lenses as measurement-model programs with MDL accounting, and vintages for streams (5.1, 5.5); identification and lens tasks (5.6); `extends` edge (5.10); independence across weeks by sequential conditioning, jurisdictions as the OOD axis (8.2); hub interoperability, generators and surgery for the builder (10).
+- **0.1.1** (2026-10-23): builder check applied.
+- **0.2** (2026-10-23): Alex's decisions applied: respiratory surveillance stream, synthetic worlds for feedback on demand, LLM captain, contributions from Alex's agent loops; interventions as surgery; lenses; vintages.
+- **0.3** (2026-10-23): simplification pass (KISS). Two kinds of created object (data vintages, programs); programs are the commitments; scores are a cache; claims are tags; environments are masks; interventions are arms; recompute replaces truth maintenance; one scorer (negative binomial by moments) and one weight rule; binary contamination rule; git as the substrate; no web service. Section 4.11 lists what was dropped and when it returns. Added section 5, the engine: agentic intelligence as a first principle (Decided), the agent loop, the task table, and the three checkers.
