@@ -20,6 +20,8 @@ from scienceme.worker_entry import program_dirname
 from scienceme.workspace import Workspace, read_model, write_new
 
 _SUFFIX = ".json"
+# `scores/<mission>/wanted/<as_of:05d>.json` are the wanted-list rankings (gain.py), not records.
+RANKING_DIR = "wanted"
 
 
 class RecordError(ValueError):
@@ -116,8 +118,12 @@ class RecordStore:
         write_new(path, RecordFile(records=tuple(records)))
 
     def all(self, mission: str) -> list[Record]:
-        """Every record of `mission`: files in path order (stream, week, program), records in file order."""
+        """Every record of `mission`: files in path order (stream, week, program), records in file order.
+
+        The mission's rankings, which sit beside the streams in `scores/<mission>/wanted/`, are not records.
+        """
         _segments("mission name", mission, single=True)
         root = self._ws.scores / mission
-        paths = sorted(p for p in root.rglob("*" + _SUFFIX) if p.is_file())
+        rankings = root / RANKING_DIR
+        paths = sorted(p for p in root.rglob("*" + _SUFFIX) if p.is_file() and p.parent != rankings)
         return [record for p in paths for record in read_model(p, RecordFile).records]

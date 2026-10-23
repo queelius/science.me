@@ -60,7 +60,8 @@ class OriginReport(Frozen):
     skipped: tuple[Skip, ...]
 
 
-def _require_isolation(mission: Mission, isolation: Isolation) -> None:
+def require_isolation(mission: Mission, isolation: Isolation) -> None:
+    """MissionError unless `isolation` is at least the mission's required floor."""
     if not isolation.at_least(mission.required_isolation):
         raise MissionError(
             f"mission {mission.name!r} requires isolation {mission.required_isolation.value!r}, "
@@ -102,7 +103,7 @@ def run_origin(
     MissionError when `isolation` is weaker than the mission requires.  Streams are visited by id and programs
     by closure hash.  WorkerError propagates; the files written before it stay.
     """
-    _require_isolation(mission, isolation)
+    require_isolation(mission, isolation)
     archive, registry, store = Archive(ws), Registry(ws), RecordStore(ws)
     specs = mission_streams(mission, archive.specs())
     stream_ids = [s.id for s in specs]
@@ -157,7 +158,7 @@ def run_all(ws: Workspace, mission: Mission, isolation: Isolation, now: datetime
 
     The latest published issue is the newest capture of any COUNT stream the mission forecasts.
     """
-    _require_isolation(mission, isolation)
+    require_isolation(mission, isolation)
     archive = Archive(ws)
     latest = max(
         (
