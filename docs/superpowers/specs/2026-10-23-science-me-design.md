@@ -1,7 +1,7 @@
 # science.me (design document)
 
-**Version:** 0.7 (2026-10-23)
-**Status:** brainstorm output, pre-plan. The social layer (section 8) is deliberately open. Reviewed by a different model lineage (Codex) at 0.6; the review is at `docs/superpowers/reviews/2026-10-23-codex-review-of-design-0.6.md` and 0.7 applies it (changelog, section 11). Two decisions pending from Alex (section 7.5).
+**Version:** 0.8 (2026-10-23)
+**Status:** brainstorm output, pre-plan. The social layer (section 8) is deliberately open. Reviewed by a different model lineage (Codex) at 0.6; the review is at `docs/superpowers/reviews/2026-10-23-codex-review-of-design-0.6.md` and 0.7 applies it (changelog, section 11). The two decisions left in 0.7 were delegated by Alex to Claude and are made in 7.5 as Calls. Approved as the basis for an implementation plan.
 **Authors:** Alexander Richard Towell (decisions), Claude (drafting; calls marked as such), Codex (review of 0.6)
 
 Labels:
@@ -135,7 +135,7 @@ weight(program) ∝ exp( Σ scores on common opportunities / τ )
 
 These are **tempered exponential predictive weights**, declared as such, and not Bayesian posterior beliefs: scores summed across correlated jurisdictions overcount shared information, and the temperature τ (declared per mission, with the number of jurisdictions as the default scale) is the acknowledged correction. The Hedge bound, that the mixture's cumulative loss is within log(1/π_i) of any fixed program's, holds under fixed prior masses and common opportunities, both of which 4.4 now supplies; it says nothing about population-scale multiple comparisons, and the design no longer claims it does. Standings still report mixture weights and never a single best program.
 
-Two quantities are reported, because they answer different questions (review, finding 14): **cumulative standing**, the undiscounted sum, which is the evidential record; and **current usefulness**, the same sum under exponential forgetting with a declared half-life, which is what the forecast hubs and the wanted list care about during a changing epidemic. Which of these counts as "the" standing in missions is pending Alex (7.5).
+Two quantities are reported, because they answer different questions (review, finding 14): **cumulative standing**, the undiscounted sum, which is the evidential record; and **current usefulness**, the same sum under exponential forgetting with a declared half-life, which is what the forecast hubs and the wanted list care about during a changing epidemic. **Cumulative standing is the standing** (Call, delegated; 7.5): it drives claim standings (4.5) and is the headline in `STANDINGS.md`. Current usefulness drives the mission's forecast mixture and the wanted list (4.10), whose job is choosing the next observation, not keeping the record. The half-life is declared per mission before its first origin; changing it is a labeled change. When the two rankings disagree sharply, the disagreement is reported as a regime-change flag and feeds the wanted list, since it says the past has stopped being a good guide to the present.
 
 Length is **not** in the weights. It is reported per program as a diagnostic, and used to choose the canonical member when two programs are predictively identical. Predictive near-duplicates are reported, not clustered into the weights: agreement on past targets is not equivalence on future interventions, and splitting weight by cluster membership invited a claim-level Sybil attack (review, finding 6). Sybil resistance at the hypothesis level is a social-layer question (section 8).
 
@@ -336,7 +336,7 @@ Evaluated on replicated synthetic worlds with matched collection budgets, measur
 - Tier 2: with tier 1 passed, every mechanistic program is poorly calibrated all season and gain stays low. The mechanism works and the domain does not inform it. Change the domain, not the design.
 - No program ever takes weight from the seeded library (4.13), across several missions. Either the library is complete, which is unlikely, or agents cannot produce theories that beat the field, in which case the premise that intelligence is the cheap input fails for this domain.
 
-Corroboration of published claims, and "insufficient evidence," are legitimate tier 2 outcomes if Alex confirms (7.5).
+Corroboration of published claims, and "insufficient evidence," are legitimate tier 2 outcomes (7.5), provided tier 1 showed the same machinery can contradict a false claim and withhold judgment on an unidentifiable one.
 
 ---
 
@@ -365,8 +365,8 @@ Alternatives set aside: NHANES (two-year cycle, latest release already in traini
 
 ### 7.3 Success criteria (falsifiable)
 
-1. Tier 1, on replicate worlds at matched budgets: gain-directed collection beats random on true predictive performance on held-out synthetic data; weight concentrates on programs matching the generator on identifiable distinctions; surgery-derived predictions on supported arms match the generator's interventions; a lens swap is absorbed by an imported program; a deliberately wrong program injected with a false README is caught by read-back.
-2. Tier 2: (a) eight consecutive weekly forecast origins scored for every eligible program, with calibration reported for the mixture and each program; (b) at least one claim of interest has a matched-pair standing with provenance, whether it corroborates, contradicts, or finds insufficient evidence for the published claim (pending 7.5); (c) held-out-jurisdiction predictive scores reported for every program with full coverage.
+1. Tier 1, on replicate worlds at matched budgets: gain-directed collection beats random on true predictive performance on held-out synthetic data; weight concentrates on programs matching the generator on identifiable distinctions; surgery-derived predictions on supported arms match the generator's interventions; a lens swap is absorbed by an imported program; a deliberately wrong program injected with a false README is caught by read-back; a planted false claim that the generator makes identifiable is contradicted, and a planted claim it makes unidentifiable comes back as insufficient evidence (the power check that gives a tier 2 corroboration its meaning).
+2. Tier 2: (a) eight consecutive weekly forecast origins scored for every eligible program, with calibration reported for the mixture and each program; (b) at least one claim of interest has a matched-pair standing with provenance, whether it corroborates, contradicts, or finds insufficient evidence for the published claim (7.5); (c) held-out-jurisdiction predictive scores reported for every program with full coverage.
 3. One person who is not Alex commits a program.
 4. Someone in the field says `STANDINGS.md` told them something they did not know.
 
@@ -378,10 +378,12 @@ Time horizon (Decided: a year is too long). Tier 1 in days. Tier 2's first count
 
 Real-money stakes; reputation; moderation; multiple captains; other domains; nowcasts and revision forecasts; ILINet as a target; a UI beyond the repository and `STANDINGS.md`; a web service; stacking; anytime-valid tests; a specified invariance analysis; static holdouts; beating the hub ensemble; NHANES.
 
-### 7.5 Pending decisions (Alex)
+### 7.5 Decisions made (Call, delegated by Alex)
 
-1. **Is corroboration a pass?** If the machinery works and the evidence supports the published claims, or cannot distinguish them, does tier 2 pass? The draft says yes (an honest standing with provenance is the deliverable, whichever way it points), and 6.3 and 7.3 are written that way pending your confirmation.
-2. **Which standing is "the" standing?** Cumulative evidence (the ledger's question) or current usefulness under forgetting (the forecaster's question). Both are reported (4.4); missions need to say which drives claim standings and the wanted list. The draft leans cumulative for claims and current usefulness for the wanted list.
+Alex left both to Claude ("whatever you feel is most appropriate", 2026-10-23). They are Calls, so he can override either.
+
+1. **Corroboration is a pass, given demonstrated power.** An honest standing with provenance is the deliverable whichever way it points; requiring a departure from published claims would reward contrarian noise (review, finding 13). A corroboration counts because tier 1 showed the instrument can both contradict and abstain (7.3, criterion 1). A null result from an instrument with demonstrated power is a result; from an untested one it is nothing.
+2. **Cumulative standing is the standing; current usefulness steers.** Claim standings and the headline use the undiscounted record; the forecast mixture and the wanted list use forgetting (4.4). The record answers "what has held up"; the wanted list answers "what to look at next," and during a changing epidemic the recent past is the better guide to that. Sharp disagreement between the two is reported, not resolved.
 
 ---
 
@@ -429,6 +431,7 @@ Pilot domain: FluSight forecast hub, 2026–27 specification (cdcepi/FluSight-fo
 
 ## 11. Changelog
 
+- **0.8** (2026-10-23): the two 0.7 decisions made as delegated Calls: corroboration passes given tier 1's power check (6.3, 7.3, 7.5); cumulative standing is the standing, current usefulness steers the mixture and the wanted list, with a regime-change flag (4.4, 7.5). Approved as the basis for an implementation plan.
 - **0.7** (2026-10-23): Codex review of 0.6 applied (`docs/superpowers/reviews/`). Eligibility against the source's information cutoff with an as-of archive (4.1, 4.2); programs submit pmfs, scored directly with an ε-floor, no projection (4.3); common-opportunity scoring for newcomers and specialists, tempered weights declared as non-Bayesian, length and duplicates out of the weights, cumulative versus current usefulness (4.4); three-valued tags and matched pairs only (4.5); held-out score renamed, surgery only through a declared interface, no fallback scores (4.6); the prospective record is immutable and corrections are labeled (4.7); raw captures and worker isolation in the kernel (4.9); gain over supporting subsets, calibration as the adequacy check, exploration reserve (4.10); 3.5, 3.8, 3.9, 3.10, 3.11 softened; pilot target narrowed to NHSN lab-confirmed admissions with FluSight vocabulary, ILINet and 2020–21 demoted to context, replicate worlds and matched budgets in the criteria (7); two pending decisions (7.5).
 - **0.6** (2026-10-23): fulfillers, cost-per-bit priority, targeted gain, votes as predictions.
 - **0.5** (2026-10-23): self-criticism pass; the seeded library.
