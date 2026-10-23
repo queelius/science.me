@@ -1,0 +1,42 @@
+{
+  "name": "seir-x1-s1",
+  "author_lineage": "anthropic/claude",
+  "entry": "program.py",
+  "library": false,
+  "imports": {
+    "core": "sha256:58c564c56024606cecab6bd67a71dd1c8c69122405c55e680f243c76fe93b291",
+    "lens": "sha256:80e5f63fc3a6dabeab3bedb48a73a637cb51109a33f760abbd6147b0aa318fc2"
+  },
+  "lens": "lens",
+  "scope": {
+    "streams": null,
+    "roles": [
+      "admissions"
+    ],
+    "jurisdictions": null,
+    "horizons": null
+  },
+  "interface": [
+    {
+      "variable": "schools_closed",
+      "timing": "start_of_week",
+      "alters": [
+        "transmission"
+      ]
+    },
+    {
+      "variable": "vaccinate_fraction",
+      "timing": "start_of_week",
+      "alters": [
+        "susceptibles"
+      ]
+    }
+  ],
+  "tags": {
+    "covariate-x": "asserts",
+    "covariate-x-flat": "asserts",
+    "school": "asserts"
+  },
+  "pairs": [],
+  "supersedes": null
+}

@@ -1,0 +1,26 @@
+{
+  "name": "hub-baseline",
+  "author_lineage": "anthropic/claude",
+  "entry": "program.py",
+  "library": false,
+  "imports": {
+    "lens": "sha256:80e5f63fc3a6dabeab3bedb48a73a637cb51109a33f760abbd6147b0aa318fc2"
+  },
+  "lens": "lens",
+  "scope": {
+    "streams": null,
+    "roles": [
+      "admissions"
+    ],
+    "jurisdictions": null,
+    "horizons": null
+  },
+  "interface": [],
+  "tags": {
+    "covariate-x": "unspecified",
+    "covariate-x-flat": "unspecified",
+    "school": "unspecified"
+  },
+  "pairs": [],
+  "supersedes": null
+}
