@@ -505,6 +505,19 @@ def test_standings_without_missions_still_writes_files(ws, cli):
     assert cli("standings", "--check")[0] == 0
 
 
+def test_the_forecast_record_is_a_cache_that_predict_rebuilds(forecasting, cli):
+    cli("predict", "--mission", "m", "--all", *NONE)
+    assert cli("standings")[0] == 0
+    shutil.rmtree(forecasting.scores)  # a fresh checkout: the forecasts are not in git
+    forecasting.scores.mkdir()
+    for args in (("standings",), ("standings", "--check")):
+        code, out, err = cli(*args)
+        assert (code, out) == (1, "")
+        assert one_line(err) and "incomplete" in err and "predict --all" in err
+    cli("predict", "--mission", "m", "--all", *NONE)
+    assert cli("standings", "--check")[0] == 0  # rebuilt forecast for forecast
+
+
 def test_standings_refuses_a_program_edited_after_freezing(forecasting, cli):
     cli("predict", "--mission", "m", "--all", *NONE)
     (forecasting.programs / "p" / "program.py").write_text(CONST + "# tampered\n")

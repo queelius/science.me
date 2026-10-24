@@ -35,7 +35,7 @@ uv run scienceme check          # prints "ok" when every program, mission and fr
 | `missions/<m>/wanted.jsonl` | Requested observations, one `WantedItem` per line, append-only | contributors |
 | `archive/<stream id>/` | `stream.json` and one write-once capture per published issue | the kernel and fulfillers |
 | `registry/freezes.jsonl` | Append-only record of every freeze and withdrawal, with times | `scienceme freeze` and `withdraw` |
-| `scores/<m>/` | The prospective record (forecasts, rankings), write-once | `scienceme predict` and `rank-wanted` |
+| `scores/<m>/` | The prospective record, write-once: forecasts (a cache kept outside git) and wanted-list rankings (in git) | `scienceme predict` and `rank-wanted` |
 | `standings.json`, `STANDINGS.md` | Generated account of where each mission stands | `scienceme standings` |
 | `scorer/` | The worker image's Dockerfile and pinned requirements | maintainers |
 
@@ -61,7 +61,7 @@ The commands:
 | `scienceme rank-wanted --mission M` | Ranks the wanted list by expected information gain and saves it. | the operator's loop |
 | `scienceme standings [--check]` | Writes the two standings files, or exits 1 if they are stale. | everyone, after a change that affects them |
 
-Exit codes: 0 success; 1 a domain error (one line on stderr, never a traceback), a failed `check`, or stale standings; 2 a usage error. CI runs `pytest`, `check` and `standings --check` on every push and pull request, so a change that leaves the generated files stale fails CI. Run `uv run scienceme standings` and commit the two files with your change.
+Exit codes: 0 success; 1 a domain error (one line on stderr, never a traceback), a failed `check`, or stale standings; 2 a usage error. CI runs `pytest` and `check` on every push and pull request. The forecasts are not in git: they are a pure function of the registry and the archive, so they are a cache, and on a fresh checkout `uv run scienceme predict --mission M --all` rebuilds them, forecast for forecast, for each mission. `standings` and `standings --check` refuse a partial cache (a program with fewer forecasts than the committed `standings.json` counts) instead of writing over it. Run `uv run scienceme standings` and commit the two files with your change.
 
 ## Tier 1 tasks (what the repository supports now)
 
@@ -218,7 +218,7 @@ The kernel checks the manifests, not the code. Whether two programs really diffe
 6. **Do not write the stores that belong to the kernel.** `registry/freezes.jsonl`, `archive/`, `scores/` and the generated standings files are never edited by hand. Append-only stores raise on a write that would overwrite.
 7. **No weaker isolation to record anything.** If the container does not work, fix docker, do not lower `--isolation`.
 8. **Do not mark your own homework.** Do not write the read-back of your own program or your lineage's, and set a `captain_verdict` only if you are the captain.
-9. Before committing, run `uv run pytest -q`, `uv run scienceme check`, and `uv run scienceme standings --check` (run `scienceme standings` first if it reports stale).
+9. Before committing, run `uv run pytest -q`, `uv run scienceme check`, and `uv run scienceme standings --check` (run `scienceme standings` first if it reports stale, and `scienceme predict --mission M --all` first if it reports the forecast record incomplete).
 
 ## The read-back protocol
 

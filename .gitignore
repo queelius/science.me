@@ -2,3 +2,7 @@
 __pycache__/
 .coverage
 .pytest_cache/
+# Forecast records are a cache outside git, rebuilt by `scienceme predict --all` (spec 4.7).
+# Wanted-list rankings depend on when they were made, so they stay.
+scores/*/*/
+!scores/*/wanted/

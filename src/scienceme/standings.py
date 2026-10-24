@@ -2,8 +2,13 @@
 
 `compute` turns one mission's record into a `Standings`; `render` formats a list of them as Markdown;
 `write_all` writes `standings.json` and `STANDINGS.md` at the workspace root, and `check_all` says whether
-those files are what `write_all` would write now.  CI fails on a stale file, so everything here is a pure
-function of the repository: no wall-clock, and every ordering is explicit.
+those files are what `write_all` would write now.  A stale file fails the check, so everything here is a pure
+function of the workspace: no wall-clock, and every ordering is explicit.
+
+The forecast records are a cache kept outside git (spec 4.7): `scienceme predict --all` rebuilds them from
+the registry and the archive, forecast for forecast.  The record only grows, so both functions refuse a
+checkout whose record holds fewer forecasts for a program than the committed `standings.json` counts
+(`IncompleteRecordError`), rather than writing or passing standings over a partial cache.
 
 A stream's *awake* programs are the ones with any record on it (a forecast or an unscored run) that were
 never withdrawn.  Advantages come from one mixture run over the whole mission, so a program carries the same
@@ -34,6 +39,7 @@ from scienceme.mission import Mission, list_missions, load_mission, mission_stre
 from scienceme.model import Frozen, StreamKind, StreamSpec
 from scienceme.readback import ReadbackFlag, load_readback
 from scienceme.readback import flags as readback_flags
+from scienceme.record import RecordError
 from scienceme.registry import Freeze, Registry, RegistryError, Withdrawal
 from scienceme.scoring import Resolution, ResolvedTarget, resolve
 from scienceme.weights import Advantages, normalized_weights, regime_tv, run_mixture
@@ -47,6 +53,11 @@ _TOP_MASS = 0.9
 _WANTED_SHOWN = 10
 _ENCODING = "utf-8"
 _SIGNIFICANT_DIGITS = 12
+_SHORTFALLS_SHOWN = 3
+
+
+class IncompleteRecordError(RecordError):
+    """This checkout's forecast record holds fewer forecasts for a program than the committed standings count."""
 
 
 class ProgramStanding(Frozen):
@@ -301,6 +312,11 @@ def _freeze(freezes: Mapping[str, Freeze], program: str) -> Freeze:
         raise RegistryError(f"{program} is not frozen") from None
 
 
+def _withdrawn(registry: Registry) -> set[str]:
+    """The closure hashes of every withdrawn program."""
+    return {e.closure_hash for e in registry.entries() if isinstance(e, Withdrawal)}
+
+
 def compute(ws: Workspace, mission: Mission, as_of: int) -> Standings:
     """The standings of `mission` as of issue `as_of`.
 
@@ -314,7 +330,7 @@ def compute(ws: Workspace, mission: Mission, as_of: int) -> Standings:
     claims = claim_standings(ws, mission, resolution, {s.id: s for s in specs})
     ranking = load_latest_ranking(ws, mission.name)
     freezes = registry.freezes()
-    withdrawn = {e.closure_hash for e in registry.entries() if isinstance(e, Withdrawal)}
+    withdrawn = _withdrawn(registry)
 
     facts: dict[str, _Facts] = {}
     streams = []
@@ -497,9 +513,44 @@ def _all_standings(ws: Workspace) -> list[Standings]:
     return standings
 
 
+def _previous(ws: Workspace) -> list[Standings]:
+    """The standings in the workspace's `standings.json`; none when it is missing or not a standings file."""
+    try:
+        return _STANDINGS_LIST.validate_json((ws.root / JSON_FILE).read_bytes())
+    except (OSError, ValueError):
+        return []
+
+
+def _shortfalls(previous: Sequence[Standings], current: Sequence[Standings], withdrawn: set[str]) -> list[str]:
+    """One line per program that `previous` counts more forecasts for than `current`, sorted.
+
+    A program withdrawn since is no longer shown, so it is not compared.
+    """
+    have = {(s.mission, p.program): p.n_predicted for s in current for st in s.streams for p in st.programs}
+    lines = {
+        f"{s.mission}: {p.name} has {have.get((s.mission, p.program), 0)} of its {p.n_predicted} forecasts"
+        for s in previous
+        for st in s.streams
+        for p in st.programs
+        if p.program not in withdrawn and have.get((s.mission, p.program), 0) < p.n_predicted
+    }
+    return sorted(lines)
+
+
 def _outputs(ws: Workspace) -> dict[str, bytes]:
-    """The bytes of each generated file, by file name."""
+    """The bytes of each generated file, by file name.
+
+    IncompleteRecordError when they would count fewer forecasts for a program than the `standings.json` they
+    replace: the record only grows, so the local cache of it is partial.
+    """
     standings = _all_standings(ws)
+    short = _shortfalls(_previous(ws), standings, _withdrawn(Registry(ws)))
+    if short:
+        shown = "; ".join(short[:_SHORTFALLS_SHOWN])
+        more = f"; and {len(short) - _SHORTFALLS_SHOWN} more" if len(short) > _SHORTFALLS_SHOWN else ""
+        raise IncompleteRecordError(
+            f"the forecast record here is incomplete ({shown}{more}): rebuild it with `scienceme predict --all`"
+        )
     return {
         JSON_FILE: _STANDINGS_LIST.dump_json(standings, indent=2) + b"\n",
         MARKDOWN_FILE: render(standings).encode(_ENCODING),
@@ -507,13 +558,19 @@ def _outputs(ws: Workspace) -> dict[str, bytes]:
 
 
 def write_all(ws: Workspace) -> None:
-    """Write `standings.json` and `STANDINGS.md` at the workspace root, replacing any earlier ones."""
+    """Write `standings.json` and `STANDINGS.md` at the workspace root, replacing any earlier ones.
+
+    IncompleteRecordError, writing nothing, when the local forecast record is partial (`_outputs`).
+    """
     for name, data in _outputs(ws).items():
         (ws.root / name).write_bytes(data)
 
 
 def check_all(ws: Workspace) -> bool:
-    """True when both generated files exist and are byte-for-byte what `write_all` would write now."""
+    """True when both generated files exist and are byte-for-byte what `write_all` would write now.
+
+    IncompleteRecordError when the local forecast record is partial, since then there is nothing to compare.
+    """
     for name, data in _outputs(ws).items():
         path = ws.root / name
         if not path.is_file() or path.read_bytes() != data:

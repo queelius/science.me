@@ -1,6 +1,6 @@
 # science.me (design document)
 
-**Version:** 0.8.1 (2026-10-23)
+**Version:** 0.8.2 (2026-10-23)
 **Status:** brainstorm output, pre-plan. The social layer (section 8) is deliberately open. Reviewed by a different model lineage (Codex) at 0.6; the review is at `docs/superpowers/reviews/2026-10-23-codex-review-of-design-0.6.md` and 0.7 applies it (changelog, section 11). The two decisions left in 0.7 were delegated by Alex to Claude and are made in 7.5 as Calls. Approved as the basis for an implementation plan; the tier 1 plan is `docs/superpowers/plans/2026-10-23-science-me-tier1.md`, and 0.8.1 carries the corrections writing it exposed.
 **Authors:** Alexander Richard Towell (decisions), Claude (drafting; calls marked as such), Codex (review of 0.6)
 
@@ -164,6 +164,8 @@ Objects are immutable. To change a program or an import, commit a new one; it is
 
 **The prospective record is never recomputed.** A program's scores on the targets it predicted, with the closure it had when frozen, stand. Replacing a lens in December does not re-score October's program with December's lens; that would turn a post-outcome repair into historical predictive success (review, finding 4). Two kinds of correction exist and are labeled: a **scorer arithmetic correction** (a bug in the scorer, fixed and recorded as a new scorer hash, re-run on the prospective record with both results kept), and a **source data correction** (the source itself corrects a release). Neither is a change of scoring convention after seeing outcomes; a change of convention is a new mission epoch. Current standing is computed from the prospective record under the current scorer hash, with the corrected analysis beside it.
 
+**Forecasts are a cache; their inputs are the record** (0.8.2, Alex's decision). A forecast is a pure function of the frozen closure, the as-of view and the scorer image: the view is cut at the vintage's own publication time, eligibility at the same instant, and the seed is derived from the target. Rebuilding a forecast is therefore not recomputing the record in the sense above; it reruns the same closure on the same inputs and gets the same pmf. So git holds the inputs (`registry/`, `archive/`, missions) and the wanted-list rankings, which depend on when they were made; the forecasts, which reach megabytes each once counts are large, are kept outside git and rebuilt by `scienceme predict --all`. What makes a forecast prospective is the freeze time against the publication time, and both are in git. The record only grows, so `standings` refuses a checkout whose forecasts number fewer than the committed standings count, rather than writing over a partial cache. Two limits: a rebuild needs the pinned scorer image, so whoever keeps the record keeps the image; and floats can differ in the last bit between CPU families, which the standings' 12-digit rounding absorbs.
+
 ### 4.8 Read-back
 
 For every program, an agent of a different model lineage than the author's, given the code and its imports but not the README, writes what the program literally assumes. The captain compares it to the README and the tags. Faithfulness is judged on that comparison, not by reading code. This is Prove2Me's mechanism verbatim, and it is also the design's first anti-monoculture measure.
@@ -211,8 +213,8 @@ science-me/
   programs/<name>/         # program.json (manifest, tags), program.py, README.md (prose), readback.json
   missions/<name>/         # mission.json (targets, horizons, lag, held-out masks, claims with scope, epsilon, tau, captain), wanted.jsonl, README.md
   registry/freezes.jsonl   # append-only freeze and withdrawal records
-  scores/                  # the prospective record; append-only
-  STANDINGS.md             # generated; CI fails when stale
+  scores/                  # the prospective record; append-only; forecasts are a cache outside git (4.7)
+  STANDINGS.md             # generated; checked where the forecasts are
   standings.json           # the same, machine-readable (5.4)
 ```
 
@@ -435,6 +437,7 @@ Pilot domain: FluSight forecast hub, 2026–27 specification (cdcepi/FluSight-fo
 
 ## 11. Changelog
 
+- **0.8.2** (2026-10-23): forecasts are a cache kept outside git and rebuilt from the registry and the archive; git keeps the inputs and the rankings, and `standings` refuses a partial cache (4.7, 4.11). Found when the w-alpha record passed 800 MB by issue 18.
 - **0.8.1** (2026-10-23): corrections found while writing the tier 1 plan. The floor is uniform over the declared support, because a baseline floor does not bound the loss (4.3). Structured files replace parsed prose, following Alex's standing rule: `program.json` carries tags, scope, interface and pairs and is frozen with the code; `mission.json`, `wanted.jsonl`, `readback.json`, `registry/freezes.jsonl` (4.1, 4.11, 5.2). The common-opportunity rule is named as sleeping experts, and standings normalize over awake programs and report advantage over the mixture, so a program that predicts nothing never appears with weight (4.4).
 - **0.8** (2026-10-23): the two 0.7 decisions made as delegated Calls: corroboration passes given tier 1's power check (6.3, 7.3, 7.5); cumulative standing is the standing, current usefulness steers the mixture and the wanted list, with a regime-change flag (4.4, 7.5). Approved as the basis for an implementation plan.
 - **0.7** (2026-10-23): Codex review of 0.6 applied (`docs/superpowers/reviews/`). Eligibility against the source's information cutoff with an as-of archive (4.1, 4.2); programs submit pmfs, scored directly with an ε-floor, no projection (4.3); common-opportunity scoring for newcomers and specialists, tempered weights declared as non-Bayesian, length and duplicates out of the weights, cumulative versus current usefulness (4.4); three-valued tags and matched pairs only (4.5); held-out score renamed, surgery only through a declared interface, no fallback scores (4.6); the prospective record is immutable and corrections are labeled (4.7); raw captures and worker isolation in the kernel (4.9); gain over supporting subsets, calibration as the adequacy check, exploration reserve (4.10); 3.5, 3.8, 3.9, 3.10, 3.11 softened; pilot target narrowed to NHSN lab-confirmed admissions with FluSight vocabulary, ILINet and 2020–21 demoted to context, replicate worlds and matched budgets in the criteria (7); two pending decisions (7.5).

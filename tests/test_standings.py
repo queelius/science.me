@@ -1,4 +1,5 @@
 import math
+import shutil
 from collections import defaultdict
 from types import SimpleNamespace
 
@@ -18,7 +19,17 @@ from scienceme.readback import CaptainVerdict, Readback, ReadbackFlag
 from scienceme.record import PredictionRecord, RecordStore, UnscoredRecord
 from scienceme.registry import Registry, RegistryError
 from scienceme.scoring import resolve
-from scienceme.standings import Standings, _fmt, _quantized, _round, check_all, compute, render, write_all
+from scienceme.standings import (
+    IncompleteRecordError,
+    Standings,
+    _fmt,
+    _quantized,
+    _round,
+    check_all,
+    compute,
+    render,
+    write_all,
+)
 from scienceme.weights import regime_tv, run_mixture
 from scienceme.worker import scorer_hash
 from scienceme.workspace import Workspace
@@ -146,6 +157,37 @@ def test_check_detects_staleness(ws, world):
     assert check_all(ws)
     store(ws, forecast(world.good, tgt(4), 5))
     assert not check_all(ws)
+    write_all(ws)
+    assert check_all(ws)
+
+
+def test_a_partial_forecast_record_is_refused_not_written_over(ws, world):
+    save_mission(ws, world.mission)
+    write_all(ws)
+    committed = (ws.root / "standings.json").read_bytes()
+    shutil.rmtree(ws.scores)  # a fresh checkout: the forecasts are a cache outside git
+    ws.scores.mkdir()
+    for attempt in (write_all, check_all):
+        with pytest.raises(IncompleteRecordError, match=r"m: bad has 0 of its 3 forecasts; m: good .*predict --all"):
+            attempt(ws)
+    assert (ws.root / "standings.json").read_bytes() == committed
+
+
+def test_a_shortfall_lists_three_programs_and_counts_the_rest(ws, world):
+    names = [f"p{i}" for i in range(5)]
+    store(ws, *(forecast(freeze(ws, name), tgt(1), 5) for name in names))
+    save_mission(ws, world.mission)
+    write_all(ws)
+    shutil.rmtree(ws.scores)
+    ws.scores.mkdir()
+    with pytest.raises(IncompleteRecordError, match=r"m: bad .*; m: good .*; m: p0 [^;]*; and 4 more\)"):
+        write_all(ws)
+
+
+def test_a_program_withdrawn_since_the_last_standings_is_no_shortfall(ws, world):
+    save_mission(ws, world.mission)
+    write_all(ws)
+    Registry(ws).withdraw(world.bad, at(6), "test")  # no longer shown, so its count is not compared
     write_all(ws)
     assert check_all(ws)
 

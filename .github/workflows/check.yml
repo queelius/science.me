@@ -18,4 +18,5 @@ jobs:
       - run: uv sync
       - run: uv run pytest -q
       - run: uv run scienceme check
-      - run: uv run scienceme standings --check
+      # `standings --check` needs the forecast records, a cache kept outside git (spec 4.7):
+      # run it where they are, after `scienceme predict --all` rebuilds them.
