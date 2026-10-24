@@ -80,8 +80,11 @@ class Resolution(Frozen):
     programs_by_stream: dict[str, tuple[str, ...]] = {}
 
 
-def resolve(ws: Workspace, mission: Mission, as_of: int) -> Resolution:
-    """Score every prediction record of `mission` whose target resolved by issue `as_of`."""
+def resolve(ws: Workspace, mission: Mission, as_of: int, origins: range | None = None) -> Resolution:
+    """Score every prediction record of `mission` whose target resolved by issue `as_of`.
+
+    With `origins`, only the records of targets whose reference week is in it: one epoch's record.
+    """
     archive = Archive(ws)
     realized: dict[Target, int | None] = {}
     support: dict[str, int] = {}
@@ -92,6 +95,8 @@ def resolve(ws: Workspace, mission: Mission, as_of: int) -> Resolution:
     pending_targets: dict[str, set[Target]] = {}
     on_stream: dict[str, set[str]] = {}
     for record in RecordStore(ws).all(mission.name):
+        if origins is not None and record.target.reference_week not in origins:
+            continue
         stream = record.target.stream
         on_stream.setdefault(stream, set()).add(record.program)
         pending_targets.setdefault(stream, set())

@@ -35,7 +35,7 @@ from scienceme.calibration import Calibration, calibration
 from scienceme.claims import ClaimStanding, claim_standings
 from scienceme.gain import Ranking, load_latest_ranking
 from scienceme.manifest import program_files
-from scienceme.mission import Mission, list_missions, load_mission, mission_streams
+from scienceme.mission import Mission, list_missions, load_epochs, load_mission, mission_streams, under
 from scienceme.model import Frozen, StreamKind, StreamSpec
 from scienceme.readback import ReadbackFlag, load_readback
 from scienceme.readback import flags as readback_flags
@@ -317,7 +317,7 @@ def _withdrawn(registry: Registry) -> set[str]:
     return {e.closure_hash for e in registry.entries() if isinstance(e, Withdrawal)}
 
 
-def compute(ws: Workspace, mission: Mission, as_of: int) -> Standings:
+def compute(ws: Workspace, mission: Mission, as_of: int, origins: range | None = None) -> Standings:
     """The standings of `mission` as of issue `as_of`.
 
     RegistryError when a program was edited after it was frozen (the claims read every frozen manifest, and
@@ -325,10 +325,12 @@ def compute(ws: Workspace, mission: Mission, as_of: int) -> Standings:
     """
     archive, registry = Archive(ws), Registry(ws)
     specs = archive.specs()
-    resolution = resolve(ws, mission, as_of)
+    resolution = resolve(ws, mission, as_of, origins)
     adv = run_mixture(resolution.resolved, mission.tau, mission.half_life_weeks, as_of)
     claims = claim_standings(ws, mission, resolution, {s.id: s for s in specs})
-    ranking = load_latest_ranking(ws, mission.name)
+    epochs = load_epochs(ws, mission.name)
+    latest = not epochs or mission.epoch == epochs[-1].epoch
+    ranking = load_latest_ranking(ws, mission.name) if latest else None  # the wanted list steers the current epoch
     freezes = registry.freezes()
     withdrawn = _withdrawn(registry)
 
@@ -501,15 +503,27 @@ def published_as_of(archive: Archive, mission: Mission, specs: Sequence[StreamSp
     return max((i for s in _count_streams(mission, specs) for i in archive.issues(s.id)), default=None)
 
 
-def _all_standings(ws: Workspace) -> list[Standings]:
-    """The standings of every mission with published data, in mission-name order."""
+def compute_all(ws: Workspace) -> list[Standings]:
+    """The standings of every mission with published data, in mission-name order, one per epoch in order.
+
+    Each epoch is scored under its own conventions over the origins it governs, from its start to the next
+    epoch's, so a later epoch never re-scores an earlier one's record.
+    """
     archive = Archive(ws)
     specs = archive.specs()
     standings = []
     for mission in (load_mission(ws, name) for name in list_missions(ws)):
         as_of = published_as_of(archive, mission, specs)
-        if as_of is not None:
+        if as_of is None:
+            continue
+        epochs = load_epochs(ws, mission.name)
+        if not epochs:  # `scienceme check` reports it; until then, the mission as it stands
             standings.append(compute(ws, mission, as_of))
+            continue
+        ends = [later.starts_at for later in epochs[1:]] + [None]
+        for epoch, end in zip(epochs, ends, strict=True):
+            origins = range(epoch.starts_at, as_of + 1 if end is None else end)
+            standings.append(compute(ws, under(mission, epoch), as_of, origins))
     return standings
 
 
@@ -526,13 +540,13 @@ def _shortfalls(previous: Sequence[Standings], current: Sequence[Standings], wit
 
     A program withdrawn since is no longer shown, so it is not compared.
     """
-    have = {(s.mission, p.program): p.n_predicted for s in current for st in s.streams for p in st.programs}
+    have = {(s.mission, s.epoch, p.program): p.n_predicted for s in current for st in s.streams for p in st.programs}
     lines = {
-        f"{s.mission}: {p.name} has {have.get((s.mission, p.program), 0)} of its {p.n_predicted} forecasts"
+        f"{s.mission}: {p.name} has {have.get((s.mission, s.epoch, p.program), 0)} of its {p.n_predicted} forecasts"
         for s in previous
         for st in s.streams
         for p in st.programs
-        if p.program not in withdrawn and have.get((s.mission, p.program), 0) < p.n_predicted
+        if p.program not in withdrawn and have.get((s.mission, s.epoch, p.program), 0) < p.n_predicted
     }
     return sorted(lines)
 
@@ -543,7 +557,7 @@ def _outputs(ws: Workspace) -> dict[str, bytes]:
     IncompleteRecordError when they would count fewer forecasts for a program than the `standings.json` they
     replace: the record only grows, so the local cache of it is partial.
     """
-    standings = _all_standings(ws)
+    standings = compute_all(ws)
     short = _shortfalls(_previous(ws), standings, _withdrawn(Registry(ws)))
     if short:
         shown = "; ".join(short[:_SHORTFALLS_SHOWN])

@@ -130,9 +130,9 @@ def test_mission_round_trip_keeps_claims_and_enums(ws):
 
 def test_save_mission_replaces_the_captains_file(ws):
     save_mission(ws, make_mission())
-    save_mission(ws, make_mission(epoch=2, tau=3.0))
-    assert load_mission(ws, "m").epoch == 2
-    assert load_mission(ws, "m").tau == 3.0
+    save_mission(ws, make_mission(last_issue=12, exploration_reserve=0.1))  # operational: a convention is a new epoch
+    assert load_mission(ws, "m").last_issue == 12
+    assert load_mission(ws, "m").exploration_reserve == 0.1
 
 
 def test_load_mission_of_an_unknown_name_raises(ws):

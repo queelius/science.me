@@ -10,6 +10,7 @@ This is the only library module that reads the wall clock (`_now`): everything b
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Callable, Iterator, Sequence
 from datetime import UTC, datetime
@@ -21,7 +22,7 @@ from scienceme.archive import Archive, ArchiveError
 from scienceme.claims import claim_standings
 from scienceme.gain import Ranking, load_latest_ranking, rank_wanted, save_ranking
 from scienceme.manifest import READBACK_FILE, ClosureError, PairError, load_manifest
-from scienceme.mission import Mission, MissionError, list_missions, load_mission, load_wanted
+from scienceme.mission import Mission, MissionError, begin_epoch, epoch_problems, list_missions, load_mission, load_wanted
 from scienceme.model import Isolation
 from scienceme.predict import OriginReport, run_all, run_origin
 from scienceme.readback import ReadbackError, load_readback, packet
@@ -165,6 +166,24 @@ def _standings(ws: Workspace, args: argparse.Namespace) -> int:
     return _fail(f"standings are stale: run `scienceme standings` to regenerate {JSON_FILE} and {MARKDOWN_FILE}")
 
 
+def _new_epoch(ws: Workspace, args: argparse.Namespace) -> int:
+    """Start a mission's next epoch with the conventions `--changes` gives, from `--starts-at`."""
+    mission = _mission(ws, args.mission)
+    published = published_as_of(Archive(ws), mission, Archive(ws).specs())
+    try:
+        changes = json.loads(args.changes)
+    except ValueError as e:
+        raise MissionError(f"--changes is not JSON: {e}") from e
+    if not isinstance(changes, dict):
+        raise MissionError('--changes must be a JSON object of conventions, e.g. {"epsilon": 0.02}')
+    try:
+        following = begin_epoch(ws, mission.name, changes, args.starts_at, args.reason, published)
+    except ValidationError as e:
+        raise MissionError(f"the changed mission is invalid: {_describe(e)}") from e
+    print(f"mission {following.name} is in epoch {following.epoch} from issue {args.starts_at}; run `scienceme standings`")
+    return 0
+
+
 def _readback_packet(ws: Workspace, args: argparse.Namespace) -> int:
     mission = _mission(ws, args.mission)
     freeze = _frozen(Registry(ws), args.name)
@@ -198,12 +217,19 @@ def _problems(ws: Workspace) -> Iterator[str]:
     for name in list_missions(ws):
         try:
             load_mission(ws, name)
+            loaded = True
         except (OSError, ValueError) as e:
             yield f"missions/{name}: {_describe(e)}"
+            loaded = False
         try:
             load_wanted(ws, name)
         except (OSError, ValueError) as e:
             yield f"missions/{name}/wanted.jsonl: {_describe(e)}"
+        if loaded:  # an unreadable mission is already reported, and has no conventions to compare
+            try:
+                yield from epoch_problems(ws, name)
+            except (OSError, ValueError) as e:
+                yield f"missions/{name}/epochs.jsonl: {_describe(e)}"
 
 
 def _check(ws: Workspace, args: argparse.Namespace) -> int:
@@ -266,6 +292,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     standings = command("standings", _standings, "write standings.json and STANDINGS.md")
     standings.add_argument("--check", action="store_true", help="exit 1 if the files are not what would be written")
+
+    epoch = command("new-epoch", _new_epoch, "change a mission's scoring conventions: a new epoch, from an issue not yet published")
+    epoch.add_argument("--mission", required=True, metavar="M")
+    epoch.add_argument("--changes", required=True, metavar="JSON", help='the conventions that change, e.g. {"epsilon": 0.02}')
+    epoch.add_argument("--starts-at", required=True, type=int, metavar="N", help="the first origin the new conventions govern")
+    epoch.add_argument("--reason", required=True, metavar="TEXT")
 
     readback = command("readback-packet", _readback_packet, "print the blind read-back packet of a frozen program")
     readback.add_argument("name", metavar="NAME")

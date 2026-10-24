@@ -55,6 +55,7 @@ The commands:
 |---|---|---|
 | `scienceme check` | Loads every program, mission and wanted list; verifies every freeze. Exit 1 lists the problems. | everyone, before every commit |
 | `scienceme freeze NAME` | Freezes `programs/NAME` and records the time. | the author, once |
+| `scienceme new-epoch --mission M --changes JSON --starts-at N --reason TEXT` | Changes a mission's scoring conventions (`epsilon`, `tau`, horizons, claims...) as a new epoch, governing origins from issue N, which must not be published yet. Earlier epochs keep their own standings. | the captain |
 | `scienceme withdraw NAME --reason TEXT` | Ends a frozen program's eligibility for new targets. Old scores stand. | the author or the captain |
 | `scienceme readback-packet NAME --mission M` | Prints the blind packet for a reader. | whoever commissions a read-back |
 | `scienceme predict --mission M (--issue N or --all)` | Runs every eligible program on the published origins and records the forecasts. | the operator's loop |
@@ -126,7 +127,7 @@ Trigger: any new program, or any program whose `flags` in `standings.json` inclu
 
 Trigger: several programs repeat code. Put the shared code in a library program (`"library": true`, no `predict` needed) and have the programs import it by closure hash. A library is never run by itself. Existing programs are never edited to import it: the shortened versions are new programs that `supersede` the old ones, and keep the same lens so that pairs stay matched. Length is reported in the standings (`length_bytes`), not weighed in the score.
 
-Not in tier 1, so leave to the captain: proposing a new stream, committing a predictive pmf on a wanted item, and editing `mission.json`. A mission draft you write is a proposal for the human to spot-check.
+Not in tier 1, so leave to the captain: proposing a new stream, committing a predictive pmf on a wanted item, and editing `mission.json`. A captain changes operational fields (streams, the issue window, the exploration reserve) by editing it; a scoring convention only through `scienceme new-epoch`, which `scienceme check` enforces. A mission draft you write is a proposal for the human to spot-check.
 
 ## The program contract
 

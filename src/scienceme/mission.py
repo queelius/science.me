@@ -2,16 +2,21 @@
 
 A `Mission` fixes which streams are forecast, at which horizons, over which
 issues, and the scoring parameters.  It is the captain's file and may be
-replaced.  The wanted list is an append-only JSONL of `WantedItem`s: arms
-someone would like the custodian (or another fulfiller) to run.
+replaced, except that a change of scoring convention (`convention_fields`) is a
+new epoch: `begin_epoch` records it in the append-only `epochs.jsonl`, with its
+reason and the first origin it governs, and `save_mission` refuses one made any
+other way.  Each epoch is scored under its own conventions over its own origins,
+so a convention changed after outcomes are seen never re-scores the old record.
+The wanted list is an append-only JSONL of `WantedItem`s: arms someone would
+like the custodian (or another fulfiller) to run.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
-from pydantic import Field, TypeAdapter, model_validator
+from pydantic import Field, JsonValue, TypeAdapter, model_validator
 
 from scienceme.model import Frozen, Isolation, StreamKind, StreamSpec, Target, TargetFilter
 from scienceme.workspace import Workspace, append_jsonl, read_jsonl, read_model
@@ -62,27 +67,35 @@ class WantedItem(Frozen):
     fulfiller: str = "custodian"
 
 
+# Marks a field that decides how a forecast is scored or a claim judged (`convention_fields`).
+_CONVENTION = {"convention": True}
+
+
 class Mission(Frozen):
-    """Standing orders for forecasting a set of streams over a span of issues."""
+    """Standing orders for forecasting a set of streams over a span of issues.
+
+    The fields marked as conventions decide scores and verdicts; changing one is a new epoch.  The others
+    (streams, the issue window, the exploration reserve, isolation, timeout) are operational.
+    """
 
     name: str
-    epoch: int = 1
+    epoch: int = Field(1, ge=1)
     captain: str
     streams: tuple[str, ...]
-    horizons: tuple[int, ...]
+    horizons: tuple[int, ...] = Field(json_schema_extra=_CONVENTION)
     first_issue: int
     last_issue: int
-    resolution_lag: int = Field(ge=1)
-    epsilon: float = Field(gt=0, lt=1)
-    tau: float = Field(gt=0)
-    half_life_weeks: float = Field(gt=0, allow_inf_nan=False)
-    coverage_min: float
-    claim_threshold_nats: float
-    regime_flag_tv: float
+    resolution_lag: int = Field(ge=1, json_schema_extra=_CONVENTION)
+    epsilon: float = Field(gt=0, lt=1, json_schema_extra=_CONVENTION)
+    tau: float = Field(gt=0, json_schema_extra=_CONVENTION)
+    half_life_weeks: float = Field(gt=0, allow_inf_nan=False, json_schema_extra=_CONVENTION)
+    coverage_min: float = Field(json_schema_extra=_CONVENTION)
+    claim_threshold_nats: float = Field(json_schema_extra=_CONVENTION)
+    regime_flag_tv: float = Field(json_schema_extra=_CONVENTION)
     exploration_reserve: float
     required_isolation: Isolation
     run_timeout_s: int = 300
-    claims: tuple[Claim, ...] = ()
+    claims: tuple[Claim, ...] = Field((), json_schema_extra=_CONVENTION)
 
     @model_validator(mode="after")
     def _check_refinements(self) -> Mission:
@@ -127,7 +140,33 @@ class Mission(Frozen):
         return [t for t in candidates if start is None or t.target_week >= start]
 
 
+class Epoch(Frozen):
+    """Epoch `epoch` of a mission: its conventions govern the origins from issue `starts_at` to the next epoch's start."""
+
+    epoch: int = Field(ge=1)
+    starts_at: int
+    reason: str = Field(min_length=1)
+    conventions: dict[str, JsonValue]
+
+
+def convention_fields() -> tuple[str, ...]:
+    """The `Mission` fields that decide how a forecast is scored or a claim judged."""
+    return tuple(name for name, field in Mission.model_fields.items() if field.json_schema_extra == _CONVENTION)
+
+
+def conventions(mission: Mission) -> dict[str, JsonValue]:
+    """`mission`'s conventions, as JSON values."""
+    return mission.model_dump(mode="json", include=set(convention_fields()))
+
+
+def under(mission: Mission, epoch: Epoch) -> Mission:
+    """`mission` with `epoch`'s number and conventions: the mission its origins were scored under."""
+    return Mission.model_validate(mission.model_dump(mode="json") | epoch.conventions | {"epoch": epoch.epoch})
+
+
 _WANTED = TypeAdapter(WantedItem)
+_EPOCH = TypeAdapter(Epoch)
+FIRST_REASON = "the mission's first conventions"
 
 
 def _mission_dir(ws: Workspace, name: str) -> Path:
@@ -146,11 +185,100 @@ def load_mission(ws: Workspace, name: str) -> Mission:
     return read_model(_mission_dir(ws, name) / "mission.json", Mission)
 
 
+def load_epochs(ws: Workspace, name: str) -> list[Epoch]:
+    """The mission's epochs, in order (`missions/<name>/epochs.jsonl`); empty when none is recorded."""
+    return read_jsonl(_mission_dir(ws, name) / "epochs.jsonl", _EPOCH)
+
+
+def _changed(a: Mission, b: Mission) -> list[str]:
+    ours, theirs = conventions(a), conventions(b)
+    return [name for name in convention_fields() if ours[name] != theirs[name]]
+
+
 def save_mission(ws: Workspace, mission: Mission) -> None:
-    """Write the mission file, replacing any earlier one (it is the captain's file, not an append-only store)."""
+    """Write the mission file, replacing any earlier one.
+
+    The first save records epoch 1, governing from the mission's first issue.  Later saves may change only
+    operational fields: MissionError, writing nothing, when a convention or the epoch number differs from the
+    latest epoch (a change of convention is `begin_epoch`'s), or a first save is not epoch 1.
+    """
+    epochs = load_epochs(ws, mission.name)
+    if not epochs:
+        if mission.epoch != 1:
+            raise MissionError(f"mission {mission.name!r} has no epochs yet, so it must be saved as epoch 1")
+        append_jsonl(
+            _mission_dir(ws, mission.name) / "epochs.jsonl",
+            Epoch(epoch=1, starts_at=mission.first_issue, reason=FIRST_REASON, conventions=conventions(mission)),
+        )
+    else:
+        latest = epochs[-1]
+        current = under(mission, latest)
+        if mission.epoch != latest.epoch or _changed(mission, current):
+            changed = _changed(mission, current) or ["epoch"]
+            raise MissionError(
+                f"mission {mission.name!r}: changing {', '.join(changed)} is a change of scoring convention, "
+                f"so it is a new epoch: use `scienceme new-epoch`"
+            )
+    _write(ws, mission)
+
+
+def _write(ws: Workspace, mission: Mission) -> None:
     path = _mission_dir(ws, mission.name) / "mission.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(mission.model_dump_json(), encoding="utf-8")
+
+
+def begin_epoch(
+    ws: Workspace, name: str, changes: Mapping[str, object], starts_at: int, reason: str, published: int | None
+) -> Mission:
+    """Start the mission's next epoch: `changes` to its conventions, governing origins from issue `starts_at`.
+
+    `published` is the latest issue already published on the mission's streams (None for none): the new
+    epoch must start after it, and after the latest epoch's start, so no origin whose data anyone has seen
+    is scored under conventions chosen since.  MissionError, writing nothing, when a change is not to a
+    convention, changes nothing, or the start is too early; ValueError when the changed mission is invalid.
+    """
+    mission = load_mission(ws, name)
+    epochs = load_epochs(ws, name)
+    if not epochs:
+        raise MissionError(f"mission {name!r} has no epoch record; save it once to record epoch 1")
+    stray = sorted(set(changes) - set(convention_fields()))
+    if stray:
+        raise MissionError(f"{', '.join(stray)} is not a scoring convention; change it by saving the mission")
+    latest = epochs[-1]
+    following = Mission.model_validate(mission.model_dump(mode="json") | dict(changes) | {"epoch": latest.epoch + 1})
+    if not _changed(mission, following):
+        raise MissionError(f"the changes to mission {name!r} change no convention")
+    if published is not None and starts_at <= published:
+        raise MissionError(f"a new epoch must start after issue {published}, the latest one published")
+    if starts_at <= latest.starts_at:
+        raise MissionError(f"a new epoch must start after epoch {latest.epoch}'s start, issue {latest.starts_at}")
+    append_jsonl(
+        _mission_dir(ws, name) / "epochs.jsonl",
+        Epoch(epoch=following.epoch, starts_at=starts_at, reason=reason, conventions=conventions(following)),
+    )
+    _write(ws, following)
+    return following
+
+
+def epoch_problems(ws: Workspace, name: str) -> list[str]:
+    """What is wrong with the mission's epoch record: one line each; empty when the mission follows it."""
+    epochs = load_epochs(ws, name)
+    if not epochs:
+        return [f"missions/{name}: no epochs.jsonl; save the mission once to record epoch 1"]
+    found = []
+    if [e.epoch for e in epochs] != list(range(1, len(epochs) + 1)):
+        found.append(f"missions/{name}/epochs.jsonl: epochs are not numbered 1, 2, ...")
+    if any(later.starts_at <= earlier.starts_at for earlier, later in zip(epochs, epochs[1:])):
+        found.append(f"missions/{name}/epochs.jsonl: epochs do not start in increasing order")
+    mission, latest = load_mission(ws, name), epochs[-1]
+    changed = _changed(mission, under(mission, latest))
+    if changed or mission.epoch != latest.epoch:
+        found.append(
+            f"missions/{name}/mission.json differs from its epoch {latest.epoch} in {', '.join(changed or ['epoch'])}: "
+            f"a change of convention is a new epoch (`scienceme new-epoch`)"
+        )
+    return found
 
 
 def mission_streams(mission: Mission, specs: Iterable[StreamSpec]) -> list[StreamSpec]:
