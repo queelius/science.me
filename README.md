@@ -8,7 +8,7 @@ I built this to find out how much of the scientific method can be industrialized
 
 ## Status
 
-Tier 1 pilot. The kernel works and is tested. Its data comes from synthetic epidemic worlds that publish weekly vintages on demand. The generator lives in a private companion repository, so programs cannot be fit to it. The pre-registered tier 1 evaluation has not been run yet. Of the two pilot experiments run so far, the read-back test passed (a blind reader caught a program whose description did not match its code) and the lens swap failed its criterion (adding a second observation channel did not leave the ranking of theories intact).
+Tier 1 pilot. The kernel works and is tested. Its data comes from synthetic epidemic worlds that publish weekly vintages on demand. The generator lives in a private companion repository, so programs cannot be fit to it. The pre-registered tier 1 evaluation has not been run yet. Of the two pilot experiments run so far, the read-back test passed (a blind reader caught a program whose description did not match its code) and the lens swap failed its criterion (adding a second observation channel did not leave the ranking of theories intact). The numbers are in [tier1-results.md](docs/tier1-results.md).
 
 The design, including what is still open, is in [the design doc](docs/superpowers/specs/2026-10-23-science-me-design.md).
 
