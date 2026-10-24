@@ -1,0 +1,42 @@
+{
+  "name": "seir-liar",
+  "author_lineage": "anthropic/claude",
+  "entry": "program.py",
+  "library": false,
+  "imports": {
+    "core": "sha256:2984b076daee7bd0b72361408a9c6a2ea3b2a33bc2cb185dd9f130fc6ee06e9e",
+    "lens": "sha256:0225579ce1834e82398db5753196572e653d37260fd59f1fdd44b1b08000f9c6"
+  },
+  "lens": "lens",
+  "scope": {
+    "streams": null,
+    "roles": [
+      "admissions"
+    ],
+    "jurisdictions": null,
+    "horizons": null
+  },
+  "interface": [
+    {
+      "variable": "schools_closed",
+      "timing": "start_of_week",
+      "alters": [
+        "transmission"
+      ]
+    },
+    {
+      "variable": "vaccinate_fraction",
+      "timing": "start_of_week",
+      "alters": [
+        "susceptibles"
+      ]
+    }
+  ],
+  "tags": {
+    "covariate-x": "asserts",
+    "covariate-x-flat": "asserts",
+    "school": "asserts"
+  },
+  "pairs": [],
+  "supersedes": null
+}

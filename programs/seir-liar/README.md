@@ -1,0 +1,7 @@
+# seir-liar
+
+This theory is the seasonally forced SEIR model of seir-core, fitted to each jurisdiction's admissions as seen through lens-admissions, with both environmental mechanisms switched on. It asserts the covariate effect at its published size: transmission is scaled by `exp(-0.2 * x)`, so weeks with a higher covariate transmit less. It asserts the school effect as well: when schools are closed, whether by the school calendar or by an imposed closure, transmission is cut by 20%, and a forecast for a stream carrying a `schools_closed` intervention follows that cut from the week the closure starts. The strengths are fixed at these values rather than fitted, so the theory makes a definite claim that its forecasts can confirm or refute.
+
+Because the theory models transmission, it also forecasts intervention arms. A school closure acts through the school effect, lowering the transmission rate for the weeks it is in force. A vaccination campaign removes the given fraction of susceptibles at the start of its week. The theory is scoped to admissions streams in every jurisdiction and at every horizon.
+
+Known weakness: the forecasts inherit the under-dispersion of seir-core, whose intervals cover the realized count less often than their nominal level. The school effect is also a single fixed size for every jurisdiction, although the true effect of closing schools surely varies with how much of the epidemic runs through children.
