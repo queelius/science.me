@@ -2,103 +2,39 @@
   {
     "mission": "w-alpha",
     "epoch": 1,
-    "as_of": 10,
+    "as_of": 18,
     "scorer": "sha256:39142f859177d34d66e6bda0695a7f87a6cb3769122b12a7feae29801a93cf4f",
     "streams": [
       {
         "stream": "w-alpha/admissions",
         "programs": [
           {
-            "program": "sha256:03484b90a2100c4d5cf9a15e780ea909b5d4a30fe1f3e0c4b4866d98ffd1f17e",
-            "name": "hub-baseline",
-            "lineage": "anthropic/claude",
-            "w_cumulative": 0.988880569352,
-            "w_current": 0.953221470283,
-            "advantage_cumulative": -7.67016554642,
-            "advantage_current": -6.04083160276,
-            "n_predicted": 112,
-            "coverage": 1.0,
-            "length_bytes": 11389,
-            "calibration": {
-              "pit": [
-                0.0378787874962,
-                0.0378787874962,
-                0.0378787874962,
-                0.0378787874962,
-                0.0378787874962,
-                0.0459255360469,
-                0.0714987056121,
-                0.0378787874962,
-                0.287878787496,
-                0.367424245868
-              ],
-              "coverage_50": 0.231060604148,
-              "coverage_90": 0.77811556633,
-              "n": 24
-            },
-            "flags": [
-              "missing"
-            ]
-          },
-          {
-            "program": "sha256:e475946b8225daf660f1d146e0a883b7124d03ad78a9dfef00753b6d479daca3",
-            "name": "flex-loglinear",
-            "lineage": "anthropic/claude",
-            "w_cumulative": 0.0111183121326,
-            "w_current": 0.0465565409234,
-            "advantage_cumulative": -25.6220858451,
-            "advantage_current": -18.1175506492,
-            "n_predicted": 80,
-            "coverage": 0.714285714286,
-            "length_bytes": 12083,
-            "calibration": {
-              "pit": [
-                0.0252525249974,
-                0.0252525249974,
-                0.0252525249974,
-                0.0252525249974,
-                0.0252525249974,
-                0.0252525249974,
-                0.0252525249974,
-                0.0252525249974,
-                0.0252525249974,
-                0.772727275023
-              ],
-              "coverage_50": 0.126262624987,
-              "coverage_90": 0.227272724977,
-              "n": 4
-            },
-            "flags": [
-              "missing"
-            ]
-          },
-          {
             "program": "sha256:c50a99e377fec8913a89861562df2cfa655d36eac1e64b2e8825198b2382435a",
             "name": "seir-x1-s0",
             "lineage": "anthropic/claude",
-            "w_cumulative": 5.38835472635e-7,
-            "w_current": 0.000100994804696,
-            "advantage_cumulative": -65.3608609247,
-            "advantage_current": -42.6509654888,
-            "n_predicted": 64,
-            "coverage": 0.571428571429,
+            "w_cumulative": 0.94455884156,
+            "w_current": 0.798546203006,
+            "advantage_cumulative": -92.7505618194,
+            "advantage_current": -39.130946366,
+            "n_predicted": 192,
+            "coverage": 0.8,
             "length_bytes": 31111,
             "calibration": {
               "pit": [
-                0.2997216596,
-                0.0497216596,
-                0.0497216596,
-                0.0497216596,
-                0.0497216596,
-                0.0497216596,
-                0.0497216596,
-                0.0395308598197,
-                0.0171978096274,
-                0.345219713353
+                0.0494011603316,
+                0.0109396218701,
+                0.0109396218701,
+                0.0301703911009,
+                0.0205550064855,
+                0.0397857757162,
+                0.0494011603316,
+                0.115076166509,
+                0.076466114608,
+                0.597264981177
               ],
-              "coverage_50": 0.248573290085,
-              "coverage_90": 0.388518361661,
-              "n": 12
+              "coverage_50": 0.18588950551,
+              "coverage_90": 0.4652069605,
+              "n": 104
             },
             "flags": [
               "missing"
@@ -108,29 +44,61 @@
             "program": "sha256:896750b5d033691b93d263a345dad3313e37fdabd8fcd105913d5ac116cc18de",
             "name": "seir-x1-s1",
             "lineage": "anthropic/claude",
-            "w_cumulative": 5.38835472635e-7,
-            "w_current": 0.000100994804696,
-            "advantage_cumulative": -65.3608609247,
-            "advantage_current": -42.6509654888,
-            "n_predicted": 64,
-            "coverage": 0.571428571429,
+            "w_cumulative": 0.0551623967625,
+            "w_current": 0.198070683264,
+            "advantage_cumulative": -104.112307744,
+            "advantage_current": -44.7076218663,
+            "n_predicted": 192,
+            "coverage": 0.8,
             "length_bytes": 31053,
             "calibration": {
               "pit": [
-                0.2997216596,
-                0.0497216596,
-                0.0497216596,
-                0.0497216596,
-                0.0497216596,
-                0.0497216596,
-                0.0497216596,
-                0.0395308598197,
-                0.0171978096274,
-                0.345219713353
+                0.0494011603316,
+                0.0109396218701,
+                0.0109396218701,
+                0.0205550064855,
+                0.0109396218701,
+                0.0397857757162,
+                0.0494011603316,
+                0.149169160328,
+                0.0808346592505,
+                0.578034211946
               ],
-              "coverage_50": 0.248573290085,
-              "coverage_90": 0.388518361661,
-              "n": 12
+              "coverage_50": 0.166658736279,
+              "coverage_90": 0.500032177227,
+              "n": 104
+            },
+            "flags": [
+              "missing"
+            ]
+          },
+          {
+            "program": "sha256:03484b90a2100c4d5cf9a15e780ea909b5d4a30fe1f3e0c4b4866d98ffd1f17e",
+            "name": "hub-baseline",
+            "lineage": "anthropic/claude",
+            "w_cumulative": 0.000278761675404,
+            "w_current": 0.00338050349433,
+            "advantage_cumulative": -125.263026045,
+            "advantage_current": -60.9900190341,
+            "n_predicted": 240,
+            "coverage": 1.0,
+            "length_bytes": 11389,
+            "calibration": {
+              "pit": [
+                0.0166135032878,
+                0.0166135032878,
+                0.0166135032878,
+                0.0166135032878,
+                0.0363503453931,
+                0.0310419372695,
+                0.0548166482535,
+                0.0955608717088,
+                0.161687563551,
+                0.554088620673
+              ],
+              "coverage_50": 0.18119480077,
+              "coverage_90": 0.571424493439,
+              "n": 152
             },
             "flags": [
               "missing"
@@ -140,29 +108,29 @@
             "program": "sha256:de077e4f1f8d8067ee49dd6ca577ed6ac030bef5e7e14eb4ea6634744fff979f",
             "name": "seir-x0-s0",
             "lineage": "anthropic/claude",
-            "w_cumulative": 2.04220955489e-8,
-            "w_current": 9.99959183841e-6,
-            "advantage_cumulative": -78.4520323202,
-            "advantage_current": -51.9010646923,
-            "n_predicted": 80,
-            "coverage": 0.714285714286,
+            "w_cumulative": 1.84910690806e-12,
+            "w_current": 2.13890671909e-6,
+            "advantage_cumulative": -200.587686023,
+            "advantage_current": -90.4519595166,
+            "n_predicted": 208,
+            "coverage": 0.866666666667,
             "length_bytes": 31335,
             "calibration": {
               "pit": [
-                0.194966137338,
-                0.044966137338,
-                0.044966137338,
-                0.044966137338,
-                0.044966137338,
-                0.044966137338,
-                0.044966137338,
-                0.044966137338,
-                0.0302627824395,
-                0.460008118857
+                0.0897193830277,
+                0.0147193830277,
+                0.0147193830277,
+                0.0147193830277,
+                0.0240457039005,
+                0.0395809874309,
+                0.0655294986986,
+                0.0797182512702,
+                0.093821508168,
+                0.563426518421
               ],
-              "coverage_50": 0.22483068669,
-              "coverage_90": 0.374581070744,
-              "n": 20
+              "coverage_50": 0.181930248472,
+              "coverage_90": 0.434452756901,
+              "n": 120
             },
             "flags": [
               "missing"
@@ -172,84 +140,245 @@
             "program": "sha256:c5bf0e5a3b2f595c8a9ec8e979dcda0010f1ecb88f7b9e42927cceca7ca0326e",
             "name": "seir-x0-s1",
             "lineage": "anthropic/claude",
-            "w_cumulative": 2.04220955489e-8,
-            "w_current": 9.99959183841e-6,
-            "advantage_cumulative": -78.4520323202,
-            "advantage_current": -51.9010646923,
-            "n_predicted": 80,
-            "coverage": 0.714285714286,
+            "w_cumulative": 6.15828046912e-14,
+            "w_current": 4.71329011788e-7,
+            "advantage_cumulative": -214.195987472,
+            "advantage_current": -96.5019343549,
+            "n_predicted": 208,
+            "coverage": 0.866666666667,
             "length_bytes": 31279,
             "calibration": {
               "pit": [
-                0.194966137338,
-                0.044966137338,
-                0.044966137338,
-                0.044966137338,
-                0.044966137338,
-                0.044966137338,
-                0.044966137338,
-                0.044966137338,
-                0.0302627824395,
-                0.460008118857
+                0.0813860496944,
+                0.0147193830277,
+                0.0230527163611,
+                0.0147193830277,
+                0.0271303068846,
+                0.0339762809389,
+                0.0510148164531,
+                0.105089461168,
+                0.102151750691,
+                0.546759851754
               ],
-              "coverage_50": 0.22483068669,
-              "coverage_90": 0.374581070744,
-              "n": 20
+              "coverage_50": 0.181930248472,
+              "coverage_90": 0.469050883656,
+              "n": 120
+            },
+            "flags": [
+              "missing"
+            ]
+          },
+          {
+            "program": "sha256:e475946b8225daf660f1d146e0a883b7124d03ad78a9dfef00753b6d479daca3",
+            "name": "flex-loglinear",
+            "lineage": "anthropic/claude",
+            "w_cumulative": 1.05358088168e-79,
+            "w_current": 1.181466072e-46,
+            "advantage_cumulative": -819.930523124,
+            "advantage_current": -461.239729269,
+            "n_predicted": 208,
+            "coverage": 0.866666666667,
+            "length_bytes": 12083,
+            "calibration": {
+              "pit": [
+                0.321836568606,
+                0.0635032389195,
+                0.0301699055862,
+                0.0551699055862,
+                0.0122385049496,
+                0.0199169580627,
+                0.028349774744,
+                0.0148261756418,
+                0.0418332939886,
+                0.412155673916
+              ],
+              "coverage_50": 0.13714692448,
+              "coverage_90": 0.307887763672,
+              "n": 120
             },
             "flags": [
               "missing"
             ]
           }
         ],
-        "regime_tv": 0.0356590990688,
+        "regime_tv": 0.146012638554,
         "regime_flag": false,
         "mixture_calibration": {
           "pit": [
-            0.0411712029938,
-            0.166171202994,
-            0.0411712029938,
-            0.0411712029938,
-            0.0411712029938,
-            0.0411712029938,
-            0.0411712029938,
-            0.0411712029938,
-            0.0325214643266,
-            0.513108911723
+            0.0176671843177,
+            0.0439829737913,
+            0.0176671843177,
+            0.0176671843177,
+            0.0404495383585,
+            0.0540953565926,
+            0.0858990063725,
+            0.107330099105,
+            0.10941437744,
+            0.505827095387
           ],
-          "coverage_50": 0.205856014969,
-          "coverage_90": 0.641502698335,
-          "n": 24
+          "coverage_50": 0.252809605799,
+          "coverage_90": 0.584820034112,
+          "n": 152
         },
-        "mixture_log_score": -108.75154993,
-        "n_resolved": 24,
+        "mixture_log_score": -1215.64243994,
+        "n_resolved": 152,
         "n_pending": 88,
         "n_withdrawn": 0
       },
       {
         "stream": "w-alpha/ed-visits",
-        "programs": [],
-        "regime_tv": 0.0,
+        "programs": [
+          {
+            "program": "sha256:827b681973118c415c0354ee52215fe2271339566c798cc44b4f5ab7f6e81c3e",
+            "name": "seir-x0-s1-ed",
+            "lineage": "anthropic/claude",
+            "w_cumulative": 0.987902630288,
+            "w_current": 0.93728063072,
+            "advantage_cumulative": -8.47579442015,
+            "advantage_current": -5.1873624232,
+            "n_predicted": 128,
+            "coverage": 1.0,
+            "length_bytes": 34529,
+            "calibration": {
+              "pit": [
+                0.125,
+                0.0,
+                0.025,
+                0.025,
+                0.025,
+                0.05,
+                0.025,
+                0.075,
+                0.0533212037593,
+                0.596678796241
+              ],
+              "coverage_50": 0.15,
+              "coverage_90": 0.425,
+              "n": 40
+            },
+            "flags": [
+              "missing"
+            ]
+          },
+          {
+            "program": "sha256:d5f96f191a8c6e95a80b6dab5fa05db49773412d17c4184aab598861f0e3c16e",
+            "name": "seir-x0-s0-ed",
+            "lineage": "anthropic/claude",
+            "w_cumulative": 0.0115184990763,
+            "w_current": 0.0523951130585,
+            "advantage_cumulative": -26.2823135493,
+            "advantage_current": -16.7240400705,
+            "n_predicted": 128,
+            "coverage": 1.0,
+            "length_bytes": 34585,
+            "calibration": {
+              "pit": [
+                0.1,
+                0.025,
+                0.0,
+                0.075,
+                0.075,
+                0.0,
+                0.025,
+                0.025,
+                0.0533212037593,
+                0.621678796241
+              ],
+              "coverage_50": 0.175,
+              "coverage_90": 0.325,
+              "n": 40
+            },
+            "flags": [
+              "missing"
+            ]
+          },
+          {
+            "program": "sha256:0eac6b6dad61ef583c8d358101e313751363e4d26f251a331f17d12375787559",
+            "name": "seir-x1-s1-ed",
+            "lineage": "anthropic/claude",
+            "w_cumulative": 0.000578807743979,
+            "w_current": 0.0102982842014,
+            "advantage_cumulative": -38.2452706021,
+            "advantage_current": -23.2313841736,
+            "n_predicted": 128,
+            "coverage": 1.0,
+            "length_bytes": 34303,
+            "calibration": {
+              "pit": [
+                0.1,
+                0.025,
+                0.075,
+                0.025,
+                0.05,
+                0.075,
+                0.0112109551496,
+                0.0387890448504,
+                0.05,
+                0.55
+              ],
+              "coverage_50": 0.2,
+              "coverage_90": 0.474933550034,
+              "n": 40
+            },
+            "flags": [
+              "missing"
+            ]
+          },
+          {
+            "program": "sha256:e2e1939357b32b228266e12b8e70cd7e769e108a8443cd589d40efb67ae29b91",
+            "name": "seir-x1-s0-ed",
+            "lineage": "anthropic/claude",
+            "w_cumulative": 6.28914170087e-8,
+            "w_current": 0.0000259720203835,
+            "advantage_cumulative": -74.7545344148,
+            "advantage_current": -47.1622352075,
+            "n_predicted": 128,
+            "coverage": 1.0,
+            "length_bytes": 34361,
+            "calibration": {
+              "pit": [
+                0.125,
+                0.025,
+                0.025,
+                0.025,
+                0.025,
+                0.05,
+                0.0402417983194,
+                0.0597582016806,
+                0.05,
+                0.575
+              ],
+              "coverage_50": 0.175,
+              "coverage_90": 0.334517931751,
+              "n": 40
+            },
+            "flags": [
+              "missing"
+            ]
+          }
+        ],
+        "regime_tv": 0.0506219995685,
         "regime_flag": false,
         "mixture_calibration": {
           "pit": [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0
+            0.1,
+            0.025,
+            0.025,
+            0.06301868667,
+            0.01198131333,
+            0.05,
+            0.05,
+            0.0334781927627,
+            0.116521807237,
+            0.525
           ],
-          "coverage_50": null,
-          "coverage_90": null,
-          "n": 0
+          "coverage_50": 0.223423543114,
+          "coverage_90": 0.425,
+          "n": 40
         },
-        "mixture_log_score": 0.0,
-        "n_resolved": 0,
-        "n_pending": 0,
+        "mixture_log_score": -433.569806685,
+        "n_resolved": 40,
+        "n_pending": 88,
         "n_withdrawn": 0
       }
     ],
@@ -257,34 +386,137 @@
       {
         "claim": "covariate-x",
         "statement": "The covariate x lowers transmission, so conditioning on it improves forecasts.",
-        "pairs": [],
-        "verdict": "insufficient evidence"
+        "pairs": [
+          {
+            "claim": "covariate-x",
+            "asserts": "sha256:0eac6b6dad61ef583c8d358101e313751363e4d26f251a331f17d12375787559",
+            "denies": "sha256:827b681973118c415c0354ee52215fe2271339566c798cc44b4f5ab7f6e81c3e",
+            "delta_nats": 0.0,
+            "n_targets": 0,
+            "verdict": "insufficient evidence"
+          },
+          {
+            "claim": "covariate-x",
+            "asserts": "sha256:896750b5d033691b93d263a345dad3313e37fdabd8fcd105913d5ac116cc18de",
+            "denies": "sha256:c5bf0e5a3b2f595c8a9ec8e979dcda0010f1ecb88f7b9e42927cceca7ca0326e",
+            "delta_nats": 58.4325433217,
+            "n_targets": 78,
+            "verdict": "supports"
+          },
+          {
+            "claim": "covariate-x",
+            "asserts": "sha256:c50a99e377fec8913a89861562df2cfa655d36eac1e64b2e8825198b2382435a",
+            "denies": "sha256:de077e4f1f8d8067ee49dd6ca577ed6ac030bef5e7e14eb4ea6634744fff979f",
+            "delta_nats": 56.1859877974,
+            "n_targets": 78,
+            "verdict": "supports"
+          },
+          {
+            "claim": "covariate-x",
+            "asserts": "sha256:e2e1939357b32b228266e12b8e70cd7e769e108a8443cd589d40efb67ae29b91",
+            "denies": "sha256:d5f96f191a8c6e95a80b6dab5fa05db49773412d17c4184aab598861f0e3c16e",
+            "delta_nats": 0.0,
+            "n_targets": 0,
+            "verdict": "insufficient evidence"
+          }
+        ],
+        "verdict": "supports"
       },
       {
         "claim": "covariate-x-flat",
         "statement": "The covariate x improves forecasts where it is identically zero (a negative control).",
-        "pairs": [],
+        "pairs": [
+          {
+            "claim": "covariate-x-flat",
+            "asserts": "sha256:0eac6b6dad61ef583c8d358101e313751363e4d26f251a331f17d12375787559",
+            "denies": "sha256:827b681973118c415c0354ee52215fe2271339566c798cc44b4f5ab7f6e81c3e",
+            "delta_nats": 0.0,
+            "n_targets": 0,
+            "verdict": "insufficient evidence"
+          },
+          {
+            "claim": "covariate-x-flat",
+            "asserts": "sha256:896750b5d033691b93d263a345dad3313e37fdabd8fcd105913d5ac116cc18de",
+            "denies": "sha256:c5bf0e5a3b2f595c8a9ec8e979dcda0010f1ecb88f7b9e42927cceca7ca0326e",
+            "delta_nats": 0.0,
+            "n_targets": 26,
+            "verdict": "insufficient evidence"
+          },
+          {
+            "claim": "covariate-x-flat",
+            "asserts": "sha256:c50a99e377fec8913a89861562df2cfa655d36eac1e64b2e8825198b2382435a",
+            "denies": "sha256:de077e4f1f8d8067ee49dd6ca577ed6ac030bef5e7e14eb4ea6634744fff979f",
+            "delta_nats": 0.0,
+            "n_targets": 26,
+            "verdict": "insufficient evidence"
+          },
+          {
+            "claim": "covariate-x-flat",
+            "asserts": "sha256:e2e1939357b32b228266e12b8e70cd7e769e108a8443cd589d40efb67ae29b91",
+            "denies": "sha256:d5f96f191a8c6e95a80b6dab5fa05db49773412d17c4184aab598861f0e3c16e",
+            "delta_nats": 0.0,
+            "n_targets": 0,
+            "verdict": "insufficient evidence"
+          }
+        ],
         "verdict": "insufficient evidence"
       },
       {
         "claim": "school",
         "statement": "School term raises transmission, so closing schools lowers the counts.",
-        "pairs": [],
-        "verdict": "insufficient evidence"
+        "pairs": [
+          {
+            "claim": "school",
+            "asserts": "sha256:0eac6b6dad61ef583c8d358101e313751363e4d26f251a331f17d12375787559",
+            "denies": "sha256:e2e1939357b32b228266e12b8e70cd7e769e108a8443cd589d40efb67ae29b91",
+            "delta_nats": 0.0,
+            "n_targets": 0,
+            "verdict": "insufficient evidence"
+          },
+          {
+            "claim": "school",
+            "asserts": "sha256:827b681973118c415c0354ee52215fe2271339566c798cc44b4f5ab7f6e81c3e",
+            "denies": "sha256:d5f96f191a8c6e95a80b6dab5fa05db49773412d17c4184aab598861f0e3c16e",
+            "delta_nats": 0.0,
+            "n_targets": 0,
+            "verdict": "insufficient evidence"
+          },
+          {
+            "claim": "school",
+            "asserts": "sha256:896750b5d033691b93d263a345dad3313e37fdabd8fcd105913d5ac116cc18de",
+            "denies": "sha256:c50a99e377fec8913a89861562df2cfa655d36eac1e64b2e8825198b2382435a",
+            "delta_nats": -11.3617459243,
+            "n_targets": 104,
+            "verdict": "insufficient evidence"
+          },
+          {
+            "claim": "school",
+            "asserts": "sha256:c5bf0e5a3b2f595c8a9ec8e979dcda0010f1ecb88f7b9e42927cceca7ca0326e",
+            "denies": "sha256:de077e4f1f8d8067ee49dd6ca577ed6ac030bef5e7e14eb4ea6634744fff979f",
+            "delta_nats": -13.6083014486,
+            "n_targets": 120,
+            "verdict": "contradicts"
+          }
+        ],
+        "verdict": "contradicts"
       }
     ],
     "ranking": null,
     "indicators": {
-      "interface_weight_share": 0.0,
+      "interface_weight_share": 1.0,
       "readback_clean_share": 0.0,
       "lineage_entropy": 0.0
     },
     "program_names": {
       "sha256:03484b90a2100c4d5cf9a15e780ea909b5d4a30fe1f3e0c4b4866d98ffd1f17e": "hub-baseline",
+      "sha256:0eac6b6dad61ef583c8d358101e313751363e4d26f251a331f17d12375787559": "seir-x1-s1-ed",
+      "sha256:827b681973118c415c0354ee52215fe2271339566c798cc44b4f5ab7f6e81c3e": "seir-x0-s1-ed",
       "sha256:896750b5d033691b93d263a345dad3313e37fdabd8fcd105913d5ac116cc18de": "seir-x1-s1",
       "sha256:c50a99e377fec8913a89861562df2cfa655d36eac1e64b2e8825198b2382435a": "seir-x1-s0",
       "sha256:c5bf0e5a3b2f595c8a9ec8e979dcda0010f1ecb88f7b9e42927cceca7ca0326e": "seir-x0-s1",
+      "sha256:d5f96f191a8c6e95a80b6dab5fa05db49773412d17c4184aab598861f0e3c16e": "seir-x0-s0-ed",
       "sha256:de077e4f1f8d8067ee49dd6ca577ed6ac030bef5e7e14eb4ea6634744fff979f": "seir-x0-s0",
+      "sha256:e2e1939357b32b228266e12b8e70cd7e769e108a8443cd589d40efb67ae29b91": "seir-x1-s0-ed",
       "sha256:e475946b8225daf660f1d146e0a883b7124d03ad78a9dfef00753b6d479daca3": "flex-loglinear"
     }
   },

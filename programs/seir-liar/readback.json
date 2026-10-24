@@ -1,0 +1,37 @@
+{
+  "author_lineage": "openai/codex",
+  "author_agent": "codex-cli-0.163.0",
+  "assumptions": [
+    "Each stream and jurisdiction is fitted independently with deterministic compartment dynamics and no modeled population replenishment, imported infections, or return to susceptibility.",
+    "Each week contains seven daily updates, with new infections equal to s*(1-exp(-beta*i)), exposed-to-infectious transitions equal to e/2, and infectious removals equal to i/3.",
+    "Transmission is constant within each week and follows a fixed 52-week sinusoid, with baseline transmission bounded between 0.05 and 3 and its sine and cosine coefficients each bounded between -0.7 and 0.7.",
+    "The initial susceptible state lies between 0.05 and 1, the infectious state between 1e-9 and 0.05, and the exposed state equals two-thirds of the infectious state, without a constraint that their sum be at most one.",
+    "Expected admissions equal infections acquired during the same week multiplied by a constant fitted scale between 0.001 and 1e12, with no additional admission-delay mechanism.",
+    "The covariate multiplies transmission by exp(-0.2*x), so increasing x lowers transmission and identically zero x contributes no change.",
+    "School-term values have zero transmission effect, and schools_closed interventions are removed before fitting and prediction.",
+    "An active vaccinate_fraction intervention removes its specified fraction of the remaining susceptible state once at its start week, without directly changing exposed or infectious states or modeling subsequent waning.",
+    "Missing covariate and school-term values use the latest available preceding value, or the earliest available value when none precedes the week, while entirely absent streams default to x=0 and school-term=1.",
+    "Archive histories and series are treated as chronologically ordered, with compatible integer week and issue indices, finite numeric inputs, positive reporting lags, and a valid integer count-support maximum.",
+    "Reporting development is represented by lag-specific multiplicative factors pooled across visible weeks within each stream and jurisdiction, and these factors may represent either upward or downward revisions.",
+    "Counts reported nine or more issues after their reference week are treated as complete, and development factors default to one when usable consecutive-vintage pairs with positive aggregate counts are absent.",
+    "Historical counts are divided by estimated reporting completeness and then fitted using bounded least squares on log1p counts weighted by sqrt(1+count), with negative fitting observations clipped to zero and the best of four optimization starts retained.",
+    "Observation noise follows a negative binomial distribution with a time-constant fitted size of at least one, or its Poisson limit when residual variation does not exceed the Poisson allowance.",
+    "Parameter uncertainty uses a Gaussian approximation centered on the fitted transformed parameters, with precision J-transpose-J divided by a residual variance floored at one, plus diagonal regularization equal to 12 divided by squared parameter-box widths.",
+    "Parameter propagation uses the fitted vector and 256 deterministically generated Gaussian candidate vectors, rejects candidates outside the parameter box, and falls back to the fitted vector alone if factorization fails or fewer than 32 vectors remain.",
+    "The target reporting lag determines a multiplicative adjustment to each simulated expected count, using the same estimated reporting-development relationship as the historical nowcast.",
+    "The parameter-dependent count distributions are replaced by one negative binomial or Poisson distribution matching their combined mean and variance before truncation, rather than retaining their full mixture.",
+    "Forecast probabilities above the smaller of the stream support maximum and the distribution's 0.999999 quantile are discarded, and the retained probabilities are renormalized.",
+    "Covariates, intervention values, fixed mechanism coefficients, reporting-completeness estimates, and fitted observation dispersion are treated as known during uncertainty propagation.",
+    "Cached fits are assumed reusable whenever stream, jurisdiction, as-of value, and mechanism coefficients match, because other context contents and lens identity are absent from the cache key."
+  ],
+  "inferred_tags": {
+    "covariate-x": "asserts",
+    "covariate-x-flat": "denies",
+    "school": "denies"
+  },
+  "inferred_interface": [
+    "vaccinate_fraction"
+  ],
+  "summary": "Fits a seasonal compartment model to reporting-adjusted admission counts, fixes a transmission-reducing covariate effect, makes school conditions inert, and models vaccination by removing susceptibles. It propagates approximate parameter uncertainty into a truncated count distribution; it does not evaluate whether conditioning improves forecast accuracy.",
+  "captain_verdict": "mismatch"
+}

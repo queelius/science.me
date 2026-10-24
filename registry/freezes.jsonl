@@ -12,3 +12,4 @@
 {"kind":"freeze","name":"seir-x0-s1-ed","closure_hash":"sha256:827b681973118c415c0354ee52215fe2271339566c798cc44b4f5ab7f6e81c3e","frozen_at":"2026-10-23T23:54:31.373837Z"}
 {"kind":"freeze","name":"seir-x0-s0-ed","closure_hash":"sha256:d5f96f191a8c6e95a80b6dab5fa05db49773412d17c4184aab598861f0e3c16e","frozen_at":"2026-10-23T23:54:32.632292Z"}
 {"kind":"freeze","name":"seir-liar","closure_hash":"sha256:e94007ac11bbccd92186ca57e98296b5541f8503a8626f20a6b4743d6b9f0a4e","frozen_at":"2026-10-24T00:07:43.411948Z"}
+{"kind":"withdraw","closure_hash":"sha256:e94007ac11bbccd92186ca57e98296b5541f8503a8626f20a6b4743d6b9f0a4e","at":"2026-10-24T00:11:48.698035Z","reason":"read-back experiment: declarations deliberately false"}
