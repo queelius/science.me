@@ -39,7 +39,7 @@ uv run scienceme check          # prints "ok" when every program, mission and fr
 | `standings.json`, `STANDINGS.md` | Generated account of where each mission stands | `scienceme standings` |
 | `scorer/` | The worker image's Dockerfile and pinned requirements | maintainers |
 
-Never edit `registry/`, `archive/`, `scores/`, `standings.json` or `STANDINGS.md` by hand. The synthetic worlds that produce the data live in a private companion repository, `../science.me-worlds`. Never read it, list it or search it, and never read `docs/superpowers/plans/` either (see Rules).
+Never edit `registry/`, `archive/`, `scores/`, `standings.json` or `STANDINGS.md` by hand. The synthetic worlds that produce the data live in a private companion repository, `../science.me-worlds`. Never read it, list it or search it, and never read `docs/superpowers/plans/` either (see Rules). The public `../science.me-lab` holds how the worlds publish (the custodian), how tier 1 is judged (the harness and its pre-registration) and the commitments to the private worlds; you may read it.
 
 ## The loop
 
