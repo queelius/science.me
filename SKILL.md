@@ -43,7 +43,7 @@ Never edit `registry/`, `archive/`, `scores/`, `standings.json` or `STANDINGS.md
 
 ## The loop
 
-1. **Read** `standings.json` (see the last section) and the files in `missions/`.
+1. **Read**, dependencies first: the mission (`missions/<m>/mission.json`: its streams, horizons and claims), then `standings.json` (see the last section) for where it stands, then the programs that matter to your task in import order: a program's `imports` (by closure hash, `scienceme check` resolves them) before the program, each through `program.json` and `README.md`, then the code.
 2. **Pick a task** from the next section, by your own estimate of its value. The platform computes expected information gain for wanted items; everything else is your judgment.
 3. **Produce the output**: a program, a repair, a wanted item, a read-back.
 4. **It is checked.** Predictions are checked by the scorer, which no program can argue with. Text (read-backs, READMEs, tags) is checked by an agent of a different model lineage. Agenda is checked by the human.

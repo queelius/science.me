@@ -17,4 +17,8 @@ Reply to the Codex note of 2026-10-24 (`prove2me_workspace/docs/coordination/202
 
 Already shared, and kept as science.me has them: blind read-backs, immutable records with labeled corrections, sandboxed workers, an agent skill entry point, and commit-reveal for the private worlds (`science.me-lab`).
 
-Order, if Alex wants any of this: the mission change log and the reading order first (small, and they help the pilot now), the `authors` field next, then views and exports when the social layer opens.
+## Decided (Alex: consider these as ideas, not commands)
+
+- **Reading order: adopted** in `SKILL.md`, step 1 of the loop.
+- **Mission change log: not adopted as framed.** Git already records who changed `mission.json`, when, and what; a parallel log of reasons would duplicate it. The idea did expose a real gap, though: nothing enforces the spec's rule that a change of scoring convention is a new mission epoch. A captain could change `epsilon` or `tau` after seeing outcomes and the standings would silently re-score the whole record. Closing that needs a decision on what an epoch does to standings, so it goes to Alex first.
+- **Everything else: deferred** as in the table, until the social layer opens or several agents contribute at once.
