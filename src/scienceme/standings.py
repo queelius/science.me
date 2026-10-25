@@ -329,8 +329,7 @@ def compute(ws: Workspace, mission: Mission, as_of: int, origins: range | None =
     adv = run_mixture(resolution.resolved, mission.tau, mission.half_life_weeks, as_of)
     claims = claim_standings(ws, mission, resolution, {s.id: s for s in specs})
     epochs = load_epochs(ws, mission.name)
-    latest = not epochs or mission.epoch == epochs[-1].epoch
-    ranking = load_latest_ranking(ws, mission.name) if latest else None  # the wanted list steers the current epoch
+    ranking = load_latest_ranking(ws, mission.name, mission.epoch if epochs else None)
     freezes = registry.freezes()
     withdrawn = _withdrawn(registry)
 
@@ -503,6 +502,18 @@ def published_as_of(archive: Archive, mission: Mission, specs: Sequence[StreamSp
     return max((i for s in _count_streams(mission, specs) for i in archive.issues(s.id)), default=None)
 
 
+def epoch_windows(ws: Workspace, mission: Mission, as_of: int) -> list[tuple[Mission, range | None]]:
+    """Each epoch's mission and origin window; the mission as it stands when no epochs are recorded."""
+    epochs = load_epochs(ws, mission.name)
+    if not epochs:  # `scienceme check` reports it; until then, the mission as it stands
+        return [(mission, None)]
+    ends = [later.starts_at for later in epochs[1:]] + [None]
+    return [
+        (under(mission, epoch), range(epoch.starts_at, as_of + 1 if end is None else end))
+        for epoch, end in zip(epochs, ends, strict=True)
+    ]
+
+
 def compute_all(ws: Workspace) -> list[Standings]:
     """The standings of every mission with published data, in mission-name order, one per epoch in order.
 
@@ -516,14 +527,8 @@ def compute_all(ws: Workspace) -> list[Standings]:
         as_of = published_as_of(archive, mission, specs)
         if as_of is None:
             continue
-        epochs = load_epochs(ws, mission.name)
-        if not epochs:  # `scienceme check` reports it; until then, the mission as it stands
-            standings.append(compute(ws, mission, as_of))
-            continue
-        ends = [later.starts_at for later in epochs[1:]] + [None]
-        for epoch, end in zip(epochs, ends, strict=True):
-            origins = range(epoch.starts_at, as_of + 1 if end is None else end)
-            standings.append(compute(ws, under(mission, epoch), as_of, origins))
+        for current, origins in epoch_windows(ws, mission, as_of):
+            standings.append(compute(ws, current, as_of, origins))
     return standings
 
 

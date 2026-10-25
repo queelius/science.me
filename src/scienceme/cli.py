@@ -29,7 +29,7 @@ from scienceme.readback import ReadbackError, load_readback, packet
 from scienceme.record import RecordError
 from scienceme.registry import Freeze, Registry, RegistryError
 from scienceme.scoring import resolve
-from scienceme.standings import JSON_FILE, MARKDOWN_FILE, check_all, published_as_of, write_all
+from scienceme.standings import JSON_FILE, MARKDOWN_FILE, check_all, epoch_windows, published_as_of, write_all
 from scienceme.weights import run_mixture
 from scienceme.worker import WorkerError
 from scienceme.workspace import Workspace, WriteOnceError
@@ -143,7 +143,8 @@ def _rank_wanted(ws: Workspace, args: argparse.Namespace) -> int:
     latest = load_latest_ranking(ws, mission.name)
     if latest is not None and latest.as_of == as_of:  # fail before running every program, not after
         raise WriteOnceError(f"refusing to overwrite the ranking of mission {mission.name!r} at issue {as_of}")
-    resolution = resolve(ws, mission, as_of)
+    mission, origins = epoch_windows(ws, mission, as_of)[-1]
+    resolution = resolve(ws, mission, as_of, origins)
     advantages = run_mixture(resolution.resolved, mission.tau, mission.half_life_weeks, as_of)
     claims = claim_standings(ws, mission, resolution, {s.id: s for s in specs})
     items = rank_wanted(ws, mission, as_of, _now(), args.isolation, advantages, claims)

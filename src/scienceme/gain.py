@@ -29,7 +29,7 @@ from scipy.special import expit
 from scienceme.archive import Archive, ArchiveView
 from scienceme.claims import ClaimStanding, PairStanding
 from scienceme.manifest import ProgramManifest, in_scope, supports
-from scienceme.mission import Candidate, Claim, Mission, MissionError, WantedItem, load_wanted, mission_streams
+from scienceme.mission import Candidate, Claim, Mission, MissionError, WantedItem, epoch_at, load_wanted, mission_streams
 from scienceme.model import Frozen, Isolation
 from scienceme.pmf import Pmf, PmfError, mix
 from scienceme.predict import require_isolation
@@ -288,9 +288,10 @@ def save_ranking(ws: Workspace, ranking: Ranking) -> None:
     write_new(_ranking_dir(ws, ranking.mission) / f"{ranking.as_of:05d}{_SUFFIX}", ranking)
 
 
-def load_latest_ranking(ws: Workspace, mission: str) -> Ranking | None:
+def load_latest_ranking(ws: Workspace, mission: str, epoch: int | None = None) -> Ranking | None:
     """The ranking with the highest `as_of`, or None when `mission` has none.
 
+    When `epoch` is given, only rankings whose `as_of` belongs to it are considered.
     MissionError when the file holds a different mission or `as_of` than its path claims.
     """
     directory = _ranking_dir(ws, mission)
@@ -301,6 +302,8 @@ def load_latest_ranking(ws: Workspace, mission: str) -> Ranking | None:
         for path in directory.iterdir()
         if path.is_file() and (as_of := _as_of_of(path.name)) is not None
     }
+    if epoch is not None:
+        files = {week: path for week, path in files.items() if epoch_at(ws, mission, week).epoch == epoch}
     if not files:
         return None
     as_of = max(files)

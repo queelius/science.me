@@ -19,7 +19,7 @@ from enum import StrEnum
 
 from scienceme.archive import Archive, ArchiveView
 from scienceme.manifest import in_scope, supports
-from scienceme.mission import Mission, MissionError, mission_streams
+from scienceme.mission import Mission, MissionError, epoch_at, load_epochs, mission_streams
 from scienceme.model import Frozen, Isolation, StreamKind
 from scienceme.record import PredictionRecord, Record, RecordStore, UnscoredRecord
 from scienceme.registry import Registry, RegistryError
@@ -103,6 +103,8 @@ def run_origin(
     MissionError when `isolation` is weaker than the mission requires.  Streams are visited by id and programs
     by closure hash.  WorkerError propagates; the files written before it stay.
     """
+    if load_epochs(ws, mission.name):
+        mission = epoch_at(ws, mission.name, reference_week)
     require_isolation(mission, isolation)
     archive, registry, store = Archive(ws), Registry(ws), RecordStore(ws)
     specs = mission_streams(mission, archive.specs())

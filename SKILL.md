@@ -127,7 +127,7 @@ Trigger: any new program, or any program whose `flags` in `standings.json` inclu
 
 Trigger: several programs repeat code. Put the shared code in a library program (`"library": true`, no `predict` needed) and have the programs import it by closure hash. A library is never run by itself. Existing programs are never edited to import it: the shortened versions are new programs that `supersede` the old ones, and keep the same lens so that pairs stay matched. Length is reported in the standings (`length_bytes`), not weighed in the score.
 
-Not in tier 1, so leave to the captain: proposing a new stream, committing a predictive pmf on a wanted item, and editing `mission.json`. A captain changes operational fields (streams, the issue window, the exploration reserve) by editing it; a scoring convention only through `scienceme new-epoch`, which `scienceme check` enforces. A mission draft you write is a proposal for the human to spot-check.
+Not in tier 1, so leave to the captain: proposing a new stream, committing a predictive pmf on a wanted item, and editing `mission.json`. A captain changes operational fields (adding streams, the issue window, the exploration reserve) by editing it; streams cannot be dropped; a scoring convention only through `scienceme new-epoch`, which `scienceme check` enforces. A mission draft you write is a proposal for the human to spot-check.
 
 ## The program contract
 

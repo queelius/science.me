@@ -161,6 +161,10 @@ def conventions(mission: Mission) -> dict[str, JsonValue]:
 
 def under(mission: Mission, epoch: Epoch) -> Mission:
     """`mission` with `epoch`'s number and conventions: the mission its origins were scored under."""
+    missing = sorted(set(convention_fields()) - set(epoch.conventions))
+    extra = sorted(set(epoch.conventions) - set(convention_fields()))
+    if missing or extra:
+        raise MissionError(f"epoch {epoch.epoch}: missing conventions {missing}; extra conventions {extra}")
     return Mission.model_validate(mission.model_dump(mode="json") | epoch.conventions | {"epoch": epoch.epoch})
 
 
@@ -190,6 +194,16 @@ def load_epochs(ws: Workspace, name: str) -> list[Epoch]:
     return read_jsonl(_mission_dir(ws, name) / "epochs.jsonl", _EPOCH)
 
 
+def epoch_at(ws: Workspace, mission_name: str, reference_week: int) -> Mission:
+    """The mission under the epoch governing `reference_week`; epoch 1 before the first start."""
+    mission = load_mission(ws, mission_name)
+    epochs = load_epochs(ws, mission_name)
+    if not epochs:
+        return mission
+    epoch = next((e for e in reversed(epochs) if e.starts_at <= reference_week), epochs[0])
+    return under(mission, epoch)
+
+
 def _changed(a: Mission, b: Mission) -> list[str]:
     ours, theirs = conventions(a), conventions(b)
     return [name for name in convention_fields() if ours[name] != theirs[name]]
@@ -200,8 +214,12 @@ def save_mission(ws: Workspace, mission: Mission) -> None:
 
     The first save records epoch 1, governing from the mission's first issue.  Later saves may change only
     operational fields: MissionError, writing nothing, when a convention or the epoch number differs from the
-    latest epoch (a change of convention is `begin_epoch`'s), or a first save is not epoch 1.
+    latest epoch (a change of convention is `begin_epoch`'s), a stream is dropped, or a first save is not epoch 1.
     """
+    if (_mission_dir(ws, mission.name) / "mission.json").is_file():
+        dropped = sorted(set(load_mission(ws, mission.name).streams) - set(mission.streams))
+        if dropped:
+            raise MissionError(f"cannot drop {', '.join(dropped)}: a stream once scored stays scored")
     epochs = load_epochs(ws, mission.name)
     if not epochs:
         if mission.epoch != 1:
@@ -237,15 +255,29 @@ def begin_epoch(
     epoch must start after it, and after the latest epoch's start, so no origin whose data anyone has seen
     is scored under conventions chosen since.  MissionError, writing nothing, when a change is not to a
     convention, changes nothing, or the start is too early; ValueError when the changed mission is invalid.
+    The epoch log is authoritative: retry an interrupted change to materialize it before starting another.
     """
     mission = load_mission(ws, name)
     epochs = load_epochs(ws, name)
     if not epochs:
         raise MissionError(f"mission {name!r} has no epoch record; save it once to record epoch 1")
+    latest = epochs[-1]
+    current = under(mission, latest)
+    if mission.epoch != current.epoch or _changed(mission, current):
+        previous = under(mission, epochs[-2]) if len(epochs) > 1 else current
+        try:
+            requested = Mission.model_validate(previous.model_dump(mode="json") | dict(changes) | {"epoch": latest.epoch})
+        except ValueError:
+            requested = None
+        matches = not (set(changes) - set(convention_fields())) and requested == current
+        if starts_at == latest.starts_at and reason == latest.reason and matches:
+            _write(ws, current)
+            return current
+        raise MissionError(f"mission {name!r}: retry the interrupted change before starting another epoch")
+    mission = current
     stray = sorted(set(changes) - set(convention_fields()))
     if stray:
         raise MissionError(f"{', '.join(stray)} is not a scoring convention; change it by saving the mission")
-    latest = epochs[-1]
     following = Mission.model_validate(mission.model_dump(mode="json") | dict(changes) | {"epoch": latest.epoch + 1})
     if not _changed(mission, following):
         raise MissionError(f"the changes to mission {name!r} change no convention")
@@ -272,7 +304,14 @@ def epoch_problems(ws: Workspace, name: str) -> list[str]:
     if any(later.starts_at <= earlier.starts_at for earlier, later in zip(epochs, epochs[1:])):
         found.append(f"missions/{name}/epochs.jsonl: epochs do not start in increasing order")
     mission, latest = load_mission(ws, name), epochs[-1]
-    changed = _changed(mission, under(mission, latest))
+    for epoch in epochs:
+        try:
+            current = under(mission, epoch)
+        except ValueError as error:
+            found.append(f"missions/{name}/epochs.jsonl: epoch {epoch.epoch}: {error}")
+            if epoch == latest:
+                return found
+    changed = _changed(mission, current)
     if changed or mission.epoch != latest.epoch:
         found.append(
             f"missions/{name}/mission.json differs from its epoch {latest.epoch} in {', '.join(changed or ['epoch'])}: "

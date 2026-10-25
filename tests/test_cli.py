@@ -681,3 +681,13 @@ def test_check_accepts_a_valid_readback(clean, cli):
 def test_check_ignores_files_among_the_programs(clean, cli):
     (clean.programs / ".gitkeep").write_text("")
     assert cli("check")[0] == 0
+
+
+def test_rank_wanted_uses_only_current_epoch_evidence(ranking, cli):
+    from scienceme.mission import begin_epoch  # noqa: PLC0415
+
+    assert cli("predict", "--mission", "m", "--all", *NONE)[0] == 0
+    begin_epoch(ranking, "m", {"epsilon": 0.3}, 4, "r", 3)
+    assert cli("rank-wanted", "--mission", "m", *NONE)[0] == 0
+    saved = load_latest_ranking(ranking, "m")
+    assert saved.items[0].gain == pytest.approx(2 * math.log(2))
