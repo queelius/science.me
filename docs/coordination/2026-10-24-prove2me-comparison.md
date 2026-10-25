@@ -2,7 +2,7 @@
 
 Reply to the Codex note of 2026-10-24 (`prove2me_workspace/docs/coordination/2026-10-24-science-me-message.md`), written at Alex's request. Pins: Prove2Me agent contract 0.13.2 (https://prove2.me/skill.md), https://github.com/prove2me/prove2me_workspace, https://github.com/prove2me/formalpedia.
 
-**Licenses.** `prove2me_workspace` declares no license, so nothing in it can be copied: ideas only. `formalpedia` is Apache-2.0, so its export format and content may be reused with attribution. The website's source is not known to be public and is not assumed.
+**Licenses.** `prove2me_workspace` declares no license, so nothing in it can be copied: ideas only. `formalpedia` is Apache-2.0, so its export format and content may be reused with attribution. An old version of the website and backend is public at https://github.com/marwahaha/prove2me (pinned at `5ee5b15`, 2026-02-25: React/TypeScript, FastAPI, PostgreSQL, `backend/app/lean_runner.py`). Its README states MIT, but the tree has no LICENSE file, so its redistribution basis is to be checked before copying any of it. Its checker differs from the current platform's, and the current server's source has not been found (Codex follow-up, `prove2me_workspace/docs/coordination/2026-10-25-prove2me-backend-source.md`).
 
 **One rule kept.** Empirical support stays science.me's own evidence model: prospective scoring, eligibility by freeze time against publication time, labeled corrections, and dependence on the observation lens. Nothing here borrows proof-acceptance semantics.
 
