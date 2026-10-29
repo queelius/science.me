@@ -23,7 +23,7 @@ from scienceme.mission import Mission, MissionError, epoch_at, load_epochs, miss
 from scienceme.model import Frozen, Isolation, StreamKind
 from scienceme.record import PredictionRecord, Record, RecordStore, UnscoredRecord
 from scienceme.registry import Registry, RegistryError
-from scienceme.worker import build_order, run_order, scorer_hash
+from scienceme.worker import build_order, resolve_image, run_order, scorer_hash, worker_image
 from scienceme.worker_entry import Failure, Prediction
 from scienceme.workspace import Workspace
 
@@ -83,10 +83,13 @@ def _records(
     results: tuple[Prediction | Failure, ...],
     scorer: str,
     isolation: Isolation,
+    image: str | None,
     now: datetime,
 ) -> list[Record]:
     """One record per result: a prediction, or an unscored record carrying the failure's error."""
-    stamp = dict(mission=mission.name, program=program, scorer=scorer, isolation=isolation, recorded_at=now)
+    stamp = dict(
+        mission=mission.name, program=program, scorer=scorer, isolation=isolation, image=image, recorded_at=now
+    )
     return [
         PredictionRecord(target=r.target, pmf=r.pmf, **stamp)
         if isinstance(r, Prediction)
@@ -111,6 +114,8 @@ def run_origin(
     stream_ids = [s.id for s in specs]
     programs = [h for h in sorted(registry.freezes()) if not _is_library(registry, h)]
     scorer = scorer_hash()
+    # resolved once, so every container run of the origin uses, and its records name, the same image
+    image = resolve_image(worker_image()) if isolation is Isolation.CONTAINER else None
     ran: list[Run] = []
     skipped: list[Skip] = []
 
@@ -144,11 +149,13 @@ def run_origin(
             if view is None:
                 view = archive.view(stream_ids, as_of=reference_week, published_by=cutoff)
             try:
-                result = run_order(ws, build_order(ws, program, view, mine), isolation, mission.run_timeout_s)
+                result = run_order(
+                    ws, build_order(ws, program, view, mine), isolation, mission.run_timeout_s, image
+                )
             except RegistryError:  # a member of the closure changed after freezing (R8)
                 skipped.append(Skip(stream=spec.id, program=program, reason=SkipReason.MODIFIED_AFTER_FREEZE))
                 continue
-            records = _records(mission, program, result.results, scorer, isolation, now)
+            records = _records(mission, program, result.results, scorer, isolation, image, now)
             store.write(mission.name, spec.id, reference_week, program, records)
             ran.append(Run(stream=spec.id, program=program, n_targets=len(mine)))
 

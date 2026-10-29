@@ -429,6 +429,8 @@ if sys.argv[1] == "kill" and config.get("hang_kill"):
 if sys.argv[1] == "run":
     sys.stderr.write(config.get("stderr", ""))
     sys.stderr.flush()
+    sys.stdout.write(config.get("stdout", "") + "x" * config.get("stdout_padding", 0))
+    sys.stdout.flush()
     if config.get("hang"):
         time.sleep(60)
     sys.exit(config.get("exit", 0))
@@ -482,18 +484,31 @@ def test_container_command_line(ws, view, fake_docker):
     assert after("--cap-drop") == ["ALL"]
     assert after("--security-opt") == ["no-new-privileges"]
     assert after("--memory") == ["2g"] and after("--cpus") == ["1"] and after("--pids-limit") == ["256"]
-    assert after("--tmpfs") == ["/tmp:size=256m"]
+    assert after("--tmpfs") == ["/tmp:size=256m", f"/out:size={MAX_RESULT_BYTES + (1 << 20)}"]
     assert after("--user") == [f"{os.getuid()}:{os.getgid()}"]
     (name,) = after("--name")
     assert re.fullmatch(r"sm-[0-9a-f]{32}", name)
-    work_mount, out_mount = after("-v")
-    assert work_mount.endswith(":/work:ro") and out_mount.endswith(":/out")
+    (work_mount,) = after("-v")  # nothing of the host is writable
+    assert work_mount.endswith(":/work:ro")
     assert call[-4:] == [
         "worker:test",
         "sh",
         "-c",
-        "command -v python >/dev/null 2>&1 || exit 127; python -I -m scienceme.worker_entry /work /out; exit 0",
+        "command -v python >/dev/null 2>&1 || exit 127; "
+        "python -I -m scienceme.worker_entry /work /out >/dev/null; cat /out/result.json 2>/dev/null; exit 0",
     ]
+
+
+def test_a_container_result_is_read_from_its_stdout(ws, view, fake_docker):
+    result = WorkResult(results=(Prediction(target=tgt(), pmf=Pmf.point(4)),))
+    fake_docker.configure(stdout=result.model_dump_json())
+    assert run_container(ws, view) == (Prediction(target=tgt(), pmf=Pmf.point(4)),)
+
+
+def test_a_container_result_over_the_bound_is_no_result(ws, view, fake_docker):
+    result = WorkResult(results=(Prediction(target=tgt(), pmf=Pmf.point(4)),))
+    fake_docker.configure(stdout=result.model_dump_json(), stdout_padding=MAX_RESULT_BYTES)
+    assert run_container(ws, view) == (Failure(target=tgt(), error="no-result"),)
 
 
 def test_container_names_are_unique_per_run(ws, view, fake_docker):

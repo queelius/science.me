@@ -72,10 +72,12 @@ _NO_RESULT = "no-result"
 _TIMEOUT = "timeout"
 # What the container runs.  The shell discards the program's own exit status (a program can `os._exit(126)`),
 # so the status `docker run` returns is docker's or the shell's: 127 when python is missing from the image, 126
-# or 127 when the shell cannot be run, 125 when docker itself failed.  Anything else is decided by `result.json`.
+# or 127 when the shell cannot be run, 125 when docker itself failed.  Anything else is decided by `result.json`,
+# which the shell writes to stdout once the program is done; the program's own stdout goes to /dev/null.
 _CONTAINER_SCRIPT = (
     "command -v python >/dev/null 2>&1 || exit 127; "
-    f"python -I -m {_ENTRY_MODULE} {_DOCKER_WORK} {_DOCKER_OUT}; exit 0"
+    f"python -I -m {_ENTRY_MODULE} {_DOCKER_WORK} {_DOCKER_OUT} >/dev/null; "
+    f"cat {_DOCKER_OUT}/{RESULT_FILE} 2>/dev/null; exit 0"
 )
 # `docker run` exits 125 when the daemon fails, 126 when the command cannot be invoked, 127 when it is not found.
 _DOCKER_FAILURES = frozenset({125, 126, 127})
@@ -85,6 +87,9 @@ _READ_CHUNK = 1 << 20
 # The most a `result.json` may hold.  The file is written by program code into host disk, which the container's
 # memory limit does not cover, so it is never read without this bound.
 MAX_RESULT_BYTES = 64 * 1024 * 1024
+# The size of the container's `/out`, a tmpfs inside the container's memory limit: room for a result one chunk
+# over the bound, so an oversized result is seen and refused rather than cut short into something parseable.
+_OUT_TMPFS_BYTES = MAX_RESULT_BYTES + _READ_CHUNK
 
 # The most of a failure's reason that is kept, in characters.  The reason is the program's to choose (an
 # exception's message, or whatever it writes into `result.json`) and it is stored in the record.
@@ -98,6 +103,24 @@ class WorkerError(RuntimeError):
 def worker_image() -> str:
     """The docker image of the worker: `$SCIENCEME_WORKER_IMAGE`, or `scienceme-worker:latest`."""
     return os.environ.get(IMAGE_ENV) or DEFAULT_IMAGE
+
+
+def resolve_image(image: str) -> str:
+    """The content id (`sha256:...`) of the local docker image `image`.
+
+    A tag can be moved to other contents; the id cannot, so a run given the id runs exactly the image that was
+    resolved, and a record can name it.  WorkerError when docker cannot be run or has no such image.
+    """
+    try:
+        done = subprocess.run(
+            ["docker", "image", "inspect", "--format", "{{.Id}}", image],
+            capture_output=True, text=True, timeout=_KILL_TIMEOUT_S, stdin=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise WorkerError(f"cannot inspect the image {image!r}: {e}") from e
+    if done.returncode != 0:
+        raise WorkerError(f"no docker image {image!r}: {done.stderr.strip()[:_STDERR_KEPT]}")
+    return done.stdout.strip()
 
 
 def package_hash(directory: Path) -> str:
@@ -211,10 +234,12 @@ def _run_process(work: Path, out: Path, timeout_s: int) -> None:
 def _run_container(work: Path, out: Path, timeout_s: int, image: str) -> None:
     """Run the sandbox `work` in a docker container: no network, no capabilities, read-only root and work mount.
 
-    The container runs as the caller, so the files it writes to `out` can be removed afterwards.  The program's
-    exit status never reaches docker's (see `_CONTAINER_SCRIPT`), so the result file decides the outcome, while
-    docker's and the shell's failure codes raise WorkerError.  On a timeout the container is killed, then
-    TimeoutExpired is raised.
+    Nothing the container writes reaches host disk except the result: its `/out` is a tmpfs of
+    `_OUT_TMPFS_BYTES`, and the result comes back on stdout, of which at most `MAX_RESULT_BYTES + 1` bytes are
+    kept and written to `out/result.json` (a program can write to that stdout too, which spoils only its own
+    result).  The program's exit status never reaches docker's (see `_CONTAINER_SCRIPT`), so the result file
+    decides the outcome, while docker's and the shell's failure codes raise WorkerError.  On a timeout the
+    container is killed, then TimeoutExpired is raised.
     """
     name = f"sm-{uuid.uuid4().hex}"
     command = [
@@ -230,12 +255,12 @@ def _run_container(work: Path, out: Path, timeout_s: int, image: str) -> None:
         "--pids-limit", "256",
         "--user", f"{os.getuid()}:{os.getgid()}",
         "-v", f"{work}:{_DOCKER_WORK}:ro",
-        "-v", f"{out}:{_DOCKER_OUT}",
+        "--tmpfs", f"{_DOCKER_OUT}:size={_OUT_TMPFS_BYTES}",
         image,
         "sh", "-c", _CONTAINER_SCRIPT,
     ]
     try:
-        code, stderr = _run_keeping_stderr_head(command, timeout_s)
+        code, result, stderr = _run_capturing(command, timeout_s)
     except subprocess.TimeoutExpired:
         # the run killed the docker client, not the container it started
         try:
@@ -251,29 +276,33 @@ def _run_container(work: Path, out: Path, timeout_s: int, image: str) -> None:
         raise
     if code in _DOCKER_FAILURES:
         raise WorkerError(f"docker run failed with exit code {code} (docker, or no sh or python in the image): {stderr}")
+    (out / RESULT_FILE).write_bytes(result)
 
 
-def _run_keeping_stderr_head(command: list[str], timeout_s: int) -> tuple[int, str]:
-    """Run `command` to completion; return its exit code and the first `_STDERR_KEPT` characters of its stderr.
+def _run_capturing(command: list[str], timeout_s: int) -> tuple[int, bytes, str]:
+    """Run `command` to completion; return its exit code, the first `MAX_RESULT_BYTES + 1` bytes of its stdout
+    and the first `_STDERR_KEPT` characters of its stderr.
 
-    The stderr of a container carries the program's output, so it is drained as it comes and only the head is
+    Both streams carry what the program chose to write, so each is drained as it comes and only its head is
     kept, which bounds memory.  Raises TimeoutExpired after killing the process, and WorkerError when it cannot
     be started.
     """
-    head = bytearray()
+    stdout, stderr = bytearray(), bytearray()
     try:
-        process = subprocess.Popen(
-            command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
-        )
+        process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     except OSError as e:
         raise WorkerError(f"cannot run {command[0]}: {e}") from e
 
-    def drain() -> None:
-        for chunk in iter(lambda: process.stderr.read(65536), b""):
-            head.extend(chunk[: 4 * _STDERR_KEPT - len(head)])
+    def drain(stream, head: bytearray, keep: int) -> None:
+        for chunk in iter(lambda: stream.read(65536), b""):
+            head.extend(chunk[: keep - len(head)])
 
-    reader = threading.Thread(target=drain, daemon=True)
-    reader.start()
+    readers = [
+        threading.Thread(target=drain, args=(process.stdout, stdout, MAX_RESULT_BYTES + 1), daemon=True),
+        threading.Thread(target=drain, args=(process.stderr, stderr, 4 * _STDERR_KEPT), daemon=True),
+    ]
+    for reader in readers:
+        reader.start()
     try:
         code = process.wait(timeout=timeout_s)
     except BaseException:  # a timeout, or an interrupt: either way the process must not outlive this call
@@ -281,9 +310,11 @@ def _run_keeping_stderr_head(command: list[str], timeout_s: int) -> tuple[int, s
         process.wait()
         raise
     finally:
-        reader.join()
+        for reader in readers:
+            reader.join()
+        process.stdout.close()
         process.stderr.close()
-    return code, head.decode("utf-8", errors="replace")[:_STDERR_KEPT]
+    return code, bytes(stdout), stderr.decode("utf-8", errors="replace")[:_STDERR_KEPT]
 
 
 def _failures(order: WorkOrder, error: str) -> WorkResult:

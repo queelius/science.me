@@ -1,13 +1,15 @@
 import subprocess
 
 import pytest
-from helpers import CONST, at, count_spec, publish, write_program
+from helpers import CONST, at, count_spec, make_mission, publish, write_program
 
 from scienceme.archive import Archive
 from scienceme.model import Isolation, Target
 from scienceme.pmf import Pmf
+from scienceme.predict import run_origin
+from scienceme.record import RecordStore
 from scienceme.registry import Registry
-from scienceme.worker import WorkerError, build_order, run_order
+from scienceme.worker import IMAGE_ENV, WorkerError, build_order, resolve_image, run_order
 from scienceme.worker_entry import Failure
 
 pytestmark = pytest.mark.docker
@@ -129,3 +131,51 @@ def test_container_has_no_capabilities_and_cannot_gain_privileges(ws, view, dock
         "    return Pmf.point(int(caps == 0 and status['NoNewPrivs'].strip() == '1'))\n"
     )
     assert run_in_container(ws, view, docker_image, code).pmf == Pmf.point(1)
+
+
+FILL_OUT = (
+    "import os\nfrom scienceme.sdk import Pmf\n"
+    "def predict(ctx, target):\n"
+    "    junk = os.path.join('/out', 'junk')\n"
+    "    try:\n"
+    "        with open(junk, 'wb') as f:\n"
+    "            for _ in range(256):\n                f.write(b'x' * (1 << 20))\n"
+    "        return Pmf.point(0)\n"
+    "    except OSError:\n"
+    "        os.remove(junk)\n        return Pmf.point(1)\n"
+)
+
+
+def test_container_output_is_bounded(ws, view, docker_image):
+    assert run_in_container(ws, view, docker_image, FILL_OUT).pmf == Pmf.point(1)
+
+
+def test_a_program_printing_to_stdout_keeps_its_result(ws, view, docker_image):
+    code = "from scienceme.sdk import Pmf\ndef predict(ctx, target):\n    print('noise ' * 1000)\n    return Pmf.point(2)\n"
+    assert run_in_container(ws, view, docker_image, code).pmf == Pmf.point(2)
+
+
+def image_id(image: str) -> str:
+    return subprocess.run(
+        ["docker", "image", "inspect", "--format", "{{.Id}}", image], capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+def test_resolve_image_gives_the_content_id(docker_image):
+    assert resolve_image(docker_image) == image_id(docker_image)
+    assert resolve_image(docker_image).startswith("sha256:")
+
+
+def test_resolving_a_missing_image_is_a_worker_error():
+    with pytest.raises(WorkerError):
+        resolve_image("scienceme-no-such-image:test")
+
+
+def test_a_container_origin_records_the_image_it_ran(ws, docker_image, monkeypatch):
+    monkeypatch.setenv(IMAGE_ENV, docker_image)
+    write_program(ws, "p", CONST)
+    Registry(ws).freeze("p", at(0))
+    publish(ws, count_spec(jurisdictions=("A",)), 1, {("A", 0): 3.0}, at(1))
+    run_origin(ws, make_mission(required_isolation=Isolation.CONTAINER), 1, Isolation.CONTAINER, at(3))
+    records = RecordStore(ws).all("m")
+    assert records and {r.image for r in records} == {image_id(docker_image)}

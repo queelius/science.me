@@ -147,6 +147,13 @@ def test_the_record_stamps_the_isolation_it_ran_under(ws):
     assert {r.isolation for r in RecordStore(ws).all("m")} == {Isolation.PROCESS}
 
 
+def test_a_run_outside_a_container_records_no_runtime_image(ws):
+    frozen(ws, "early")
+    publish(ws, count_spec(jurisdictions=("A",)), 1, {("A", 0): 3.0}, at(1))
+    run_origin(ws, make_mission(), 1, Isolation.NONE, at(3))
+    assert {r.image for r in RecordStore(ws).all("m")} == {None}
+
+
 def test_scorer_hash_is_computed_once_per_origin(ws, monkeypatch):
     frozen(ws, "a")
     frozen(ws, "b", CONST + "# b\n")

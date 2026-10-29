@@ -29,7 +29,11 @@ class RecordError(ValueError):
 
 
 class PredictionRecord(Frozen):
-    """Program `program` forecast `target` with `pmf`, run under `isolation` by the scorer `scorer`."""
+    """Program `program` forecast `target` with `pmf`, run under `isolation` by the scorer `scorer`.
+
+    `image` is the content id (`sha256:...`) of the worker image a `CONTAINER` run used, None for other runs
+    and for records written before it was kept.
+    """
 
     kind: Literal["prediction"] = "prediction"
     mission: str
@@ -39,10 +43,14 @@ class PredictionRecord(Frozen):
     scorer: str
     isolation: Isolation
     recorded_at: AwareDatetime
+    image: str | None = None
 
 
 class UnscoredRecord(Frozen):
-    """Program `program` was run on `target` and produced no usable forecast; `reason` is the failure's error."""
+    """Program `program` was run on `target` and produced no usable forecast; `reason` is the failure's error.
+
+    `image` is as in `PredictionRecord`.
+    """
 
     kind: Literal["unscored"] = "unscored"
     mission: str
@@ -52,6 +60,7 @@ class UnscoredRecord(Frozen):
     scorer: str
     isolation: Isolation
     recorded_at: AwareDatetime
+    image: str | None = None
 
 
 Record = Annotated[PredictionRecord | UnscoredRecord, Field(discriminator="kind")]
