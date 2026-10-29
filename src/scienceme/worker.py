@@ -45,6 +45,7 @@ from scienceme.manifest import ClosureError, closure_hash, program_files
 from scienceme.model import Isolation, Target
 from scienceme.registry import Registry, RegistryError
 from scienceme.worker_entry import (
+    MAX_ERROR_CHARS,
     ORDER_FILE,
     PROGRAMS_DIR,
     RESULT_FILE,
@@ -91,9 +92,12 @@ MAX_RESULT_BYTES = 64 * 1024 * 1024
 # over the bound, so an oversized result is seen and refused rather than cut short into something parseable.
 _OUT_TMPFS_BYTES = MAX_RESULT_BYTES + _READ_CHUNK
 
-# The most of a failure's reason that is kept, in characters.  The reason is the program's to choose (an
-# exception's message, or whatever it writes into `result.json`) and it is stored in the record.
-MAX_ERROR_CHARS = 2000
+# What one entry of a result may take beyond its target's own JSON: the framing and a pmf's `lo`.  A pmf's
+# masses take at most `_MASS_BYTES` each (a float's repr and a comma), a reason `_CHAR_BYTES` per character
+# (a control character escaped as `\uXXXX`).
+_ENTRY_BYTES = 256
+_MASS_BYTES = 32
+_CHAR_BYTES = 6
 
 
 class WorkerError(RuntimeError):
@@ -254,6 +258,7 @@ def _run_container(work: Path, out: Path, timeout_s: int, image: str) -> None:
         "--cpus", "1",
         "--pids-limit", "256",
         "--user", f"{os.getuid()}:{os.getgid()}",
+        "--log-driver", "none",
         "-v", f"{work}:{_DOCKER_WORK}:ro",
         "--tmpfs", f"{_DOCKER_OUT}:size={_OUT_TMPFS_BYTES}",
         image,
@@ -317,20 +322,50 @@ def _run_capturing(command: list[str], timeout_s: int) -> tuple[int, bytes, str]
     return code, bytes(stdout), stderr.decode("utf-8", errors="replace")[:_STDERR_KEPT]
 
 
+def result_cap(order: WorkOrder) -> int:
+    """The most bytes an honest result for `order` can take, and never more than `MAX_RESULT_BYTES`.
+
+    Each target's entry holds its target, then either a pmf on the stream's support (at most `support_max + 1`
+    masses) or a reason of at most `MAX_ERROR_CHARS` characters.  Validating a result costs host memory well
+    beyond its size, so a result is bounded by what its order can need, not only by the global cap.
+    """
+    bounds = support_bounds(order.view, order.targets)
+    total = 0
+    for target in order.targets:
+        support_max = bounds.get(target.stream)
+        masses = 0 if support_max is None else support_max + 1
+        body = max(_MASS_BYTES * masses, _CHAR_BYTES * MAX_ERROR_CHARS)
+        total += _ENTRY_BYTES + len(target.model_dump_json()) + body
+    return min(MAX_RESULT_BYTES, total)
+
+
+def _entries(data: bytes) -> int | None:
+    """How many entries the result `data` lists, or None when it is not `{"results": [...]}`.
+
+    Checked before the result is validated, so validation never runs over more entries than the order has
+    targets (each invalid entry costs its own error report).
+    """
+    parsed = json.loads(data)
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("results"), list):
+        return None
+    return len(parsed["results"])
+
+
 def _failures(order: WorkOrder, error: str) -> WorkResult:
     return WorkResult(results=tuple(Failure(target=t, error=error) for t in order.targets))
 
 
 def _read_result(out: Path, order: WorkOrder) -> WorkResult:
     """The result the run left in `out` as the host checked it (`_host_checked`), or `no-result` for every
-    target when it is not a valid result for `order`."""
+    target when it is not a valid result for `order`: over `result_cap(order)`, or listing other than one
+    entry per target."""
     no_result = _failures(order, _NO_RESULT)
     try:
-        data = _read_capped(out / RESULT_FILE, MAX_RESULT_BYTES)
-        if data is None:
+        data = _read_capped(out / RESULT_FILE, result_cap(order))
+        if data is None or _entries(data) != len(order.targets):
             return no_result
         result = WorkResult.model_validate_json(data)
-    except (OSError, ValueError):  # missing or unreadable, not UTF-8, not JSON, not a WorkResult
+    except (OSError, ValueError, RecursionError):  # missing or unreadable, not UTF-8, not JSON, not a WorkResult
         return no_result
     if tuple(r.target for r in result.results) != order.targets:
         return no_result

@@ -68,6 +68,11 @@ class Prediction(Frozen):
     pmf: Pmf
 
 
+# The most of a failure's reason that is kept, in characters.  The reason is the program's to choose (an
+# exception's message) and it is stored in the record, so it is cut here and again by the host.
+MAX_ERROR_CHARS = 2000
+
+
 class Failure(Frozen):
     """One target that got no forecast, and why."""
 
@@ -230,9 +235,9 @@ def _forecast(
         result = predict(Context(view=order.view, seed=derive_seed(order.program, target)), target)
         return Prediction(target=target, pmf=_checked(result, support_max))
     except _Rejected as e:
-        return Failure(target=target, error=str(e))
+        return Failure(target=target, error=str(e)[:MAX_ERROR_CHARS])
     except _CONTAINED as e:
-        return Failure(target=target, error=_describe(e))
+        return Failure(target=target, error=_describe(e)[:MAX_ERROR_CHARS])
 
 
 def execute(order: WorkOrder, work: Path) -> WorkResult:
@@ -240,7 +245,7 @@ def execute(order: WorkOrder, work: Path) -> WorkResult:
     try:
         predict = _Loader(order, work).predict_of(order.program)
     except _CONTAINED as e:
-        error = f"load: {e}" if isinstance(e, LoadError) else f"load: {_describe(e)}"
+        error = (f"load: {e}" if isinstance(e, LoadError) else f"load: {_describe(e)}")[:MAX_ERROR_CHARS]
         return WorkResult(results=tuple(Failure(target=t, error=error) for t in order.targets))
     bounds = support_bounds(order.view, order.targets)
     return WorkResult(results=tuple(_forecast(predict, order, bounds, t) for t in order.targets))

@@ -14,6 +14,7 @@ from scienceme.model import Target
 from scienceme.pmf import Pmf
 from scienceme.sdk import Context, imports_of, register_imports
 from scienceme.worker_entry import (
+    MAX_ERROR_CHARS,
     Failure,
     Prediction,
     WorkOrder,
@@ -434,3 +435,10 @@ def test_runs_as_a_module_in_a_fresh_process(ws, tmp_path, view):
     assert done.returncode == 0, done.stderr
     kinds = [r.kind for r in WorkResult.model_validate_json((out / "result.json").read_text()).results]
     assert kinds == ["prediction", "failure"]
+
+
+def test_a_failures_reason_is_cut_in_the_sandbox(ws, tmp_path, view):
+    code = "from scienceme.sdk import Pmf\ndef predict(ctx, target):\n    raise RuntimeError('x' * 100_000)\n"
+    write_program(ws, "p", code)
+    (result,) = run(ws, tmp_path, view, "p", [tgt()])
+    assert result.error == ("RuntimeError: " + "x" * 100_000)[:MAX_ERROR_CHARS]

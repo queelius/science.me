@@ -17,6 +17,7 @@ from scienceme.registry import Registry, RegistryError
 from scienceme.worker import (
     MAX_ERROR_CHARS,
     MAX_RESULT_BYTES,
+    result_cap,
     WorkerError,
     _read_result,
     build_order,
@@ -317,6 +318,34 @@ def test_the_result_cap_is_inclusive(tmp_path, view, monkeypatch):
     assert _read_result(tmp_path, order) == WorkResult(results=(Failure(target=tgt("A"), error="no-result"),))
 
 
+def test_the_result_cap_follows_the_order(view):
+    one = WorkOrder(program="sha256:" + "a" * 64, manifests={}, view=view, targets=(tgt("A"),))
+    two = one.model_copy(update={"targets": (tgt("A"), tgt("B"))})
+    assert 0 < result_cap(one) < result_cap(two) <= MAX_RESULT_BYTES
+    # room for any honest entry: the widest pmf on the stream's support, or the longest reason, fully escaped
+    widest = WorkResult(results=(Prediction(target=tgt("A"), pmf=Pmf(lo=0, p=(1 / 1001,) * 1001)),))
+    longest = WorkResult(results=(Failure(target=tgt("A"), error="\x00" * MAX_ERROR_CHARS),))
+    assert len(widest.model_dump_json()) <= result_cap(one) and len(longest.model_dump_json()) <= result_cap(one)
+
+
+def test_a_result_over_the_orders_cap_is_no_result(tmp_path, view):
+    order = WorkOrder(program="sha256:" + "a" * 64, manifests={}, view=view, targets=(tgt("A"),))
+    result = WorkResult(results=(Failure(target=tgt("A"), error="x" * (result_cap(order) + 1)),))
+    (tmp_path / "result.json").write_text(result.model_dump_json())
+    assert _read_result(tmp_path, order) == WorkResult(results=(Failure(target=tgt("A"), error="no-result"),))
+
+
+def test_a_result_with_more_entries_than_targets_is_refused_before_it_is_validated(tmp_path, view, monkeypatch):
+    order = WorkOrder(program="sha256:" + "a" * 64, manifests={}, view=view, targets=(tgt("A"),))
+    (tmp_path / "result.json").write_text(json.dumps({"results": [{"kind": "nonsense"}] * 1000}))
+
+    def validate(*args, **kwargs):
+        raise AssertionError("validated")
+
+    monkeypatch.setattr(WorkResult, "model_validate_json", validate)
+    assert _read_result(tmp_path, order) == WorkResult(results=(Failure(target=tgt("A"), error="no-result"),))
+
+
 @pytest.mark.skipif(not Path("/proc/self/fd").is_dir(), reason="counts open descriptors through /proc")
 @pytest.mark.parametrize("make", [os.mkdir, os.mkfifo, lambda path: path.write_text("{not json")], ids=["directory", "fifo", "invalid"])
 def test_reading_a_bad_result_leaks_no_descriptor(tmp_path, make):
@@ -486,6 +515,7 @@ def test_container_command_line(ws, view, fake_docker):
     assert after("--memory") == ["2g"] and after("--cpus") == ["1"] and after("--pids-limit") == ["256"]
     assert after("--tmpfs") == ["/tmp:size=256m", f"/out:size={MAX_RESULT_BYTES + (1 << 20)}"]
     assert after("--user") == [f"{os.getuid()}:{os.getgid()}"]
+    assert after("--log-driver") == ["none"]  # docker keeps no host-side log of what the program prints
     (name,) = after("--name")
     assert re.fullmatch(r"sm-[0-9a-f]{32}", name)
     (work_mount,) = after("-v")  # nothing of the host is writable
