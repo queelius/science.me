@@ -38,7 +38,7 @@ Order fails. On admissions the cumulative weights rank the four `x1-s0 > x1-s1 >
 
 What this does and does not show:
 
-- The lens was absorbed in the calibration sense. Swapping it left each theory about as well calibrated on the new channel as on the old.
+- The lens swap did not degrade calibration much: each theory was about as well calibrated on the new channel as on the old. But it was poorly calibrated on both. Every `coverage_90` above is between 0.33 and 0.53, against a nominal 0.90. Coverage that is equally poor on both channels is not evidence that the lens was absorbed. A replacement criterion should require adequate calibration on each channel, as well as similar calibration across them.
 - The ranking was not preserved. Over 40 targets, the four theories' admissions log scores span about 10 nats. A ranking with that little separation can flip between channels on noise alone.
 - So the failure may say more about the criterion than about the mechanism: an order test needs enough data to separate the theories first. That reading is a hypothesis for the next plan, though, not a reason to re-judge this one. The criterion was fixed in advance and it failed.
 
@@ -47,7 +47,7 @@ What this does and does not show:
 This analysis was done after the result, by an independent Codex reviewer. It does not change the verdict above.
 
 - **Separation.** Over the shared weeks, per-target log-score differences between theory pairs are 0.01 to 0.25 nats. Their per-target standard deviations are 1.7 to 4.9 nats.
-- **Flip chance.** Model each pair's channel averages as correlated normals with equal means, which is what perfect absorption implies. Then the chance a pair flips between channels is about 1/3 to 1/2. That assumes a variance inflation of 4 for autocorrelation and a cross-channel correlation of 0 to 0.5. Under those assumptions, a perfectly absorbed lens would usually have failed a 5-of-6 order test.
+- **Flip chance.** Model each pair's channel averages as correlated normals with equal means, which is what perfect absorption implies. Then the chance a pair flips between channels is about 1/3 to 1/2. That assumes a variance inflation of 4 for autocorrelation and a cross-channel correlation of 0 to 0.5. Under those assumptions, a perfectly absorbed lens would usually have failed a 5-of-6 order test. This is a sensitivity analysis: four outcome weeks cannot pin down the covariance it assumes, so it shows the test was fragile, not that it was undecidable.
 - **Unequal histories.** The pre-registered statistic, cumulative mixture weight, compared unequal histories: 104 to 120 admissions targets per theory against 40 on ED.
 - **A powered alternative.** One option is a two one-sided equivalence test (TOST) on each pair's cross-channel score contrast, required for all six pairs. It would use a 0.10 nat/target margin, weekly blocks and autocorrelation-robust standard errors. At about 90% power, it would need on the order of 4,000 to 64,000 issues of one epidemic, depending on the autocorrelation.
 
